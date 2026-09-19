@@ -531,7 +531,14 @@ function safeJsonStringify(obj: any, indent?: number): string {
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use((err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err instanceof SyntaxError && 'status' in err && (err as any).status === 400) {
+    res.status(400).json({ error: 'Invalid JSON payload' });
+    return;
+  }
+  next(err);
+});
 
 // Direct static handlers for PWA assets to prevent 302/redirect errors on ServiceWorker scope
 app.all(['/sw.js', '/sw.js/*', '/service-worker.js', '/public/sw.js', '/workbox-*.js'], (_req, res) => {
