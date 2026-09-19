@@ -1,6 +1,6 @@
 import React from 'react';
-import { Disc3, Download, Languages, Library, HardDriveDownload, Sparkles, Wifi, WifiOff, QrCode, Laptop } from 'lucide-react';
-import { AppLanguage } from '../types';
+import { Disc3, Download, Languages, Library, HardDriveDownload, Sparkles, Wifi, WifiOff, QrCode, Laptop, Sun, Moon } from 'lucide-react';
+import { AppLanguage, AppTheme } from '../types';
 import { translations } from '../utils/translations';
 
 interface HeaderProps {
@@ -16,6 +16,8 @@ interface HeaderProps {
   onOpenQRCode?: () => void;
   onOpenStorageManagement?: () => void;
   onOpenWindowsInstall?: () => void;
+  theme?: AppTheme;
+  onToggleTheme?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -31,6 +33,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenQRCode,
   onOpenStorageManagement,
   onOpenWindowsInstall,
+  theme = 'light-blue',
+  onToggleTheme,
 }) => {
   const t = translations[language];
   const isOverLimit = storageLimitMb > 0 && totalStorageMb >= storageLimitMb;
@@ -82,6 +86,19 @@ export const Header: React.FC<HeaderProps> = ({
                 title="QR Code"
               >
                 <QrCode className="w-4 h-4 text-yellow-400" />
+              </button>
+            )}
+            {onToggleTheme && (
+              <button
+                onClick={onToggleTheme}
+                className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-bold transition-colors shadow-sm active:scale-95 min-h-[38px] min-w-[38px] flex items-center justify-center"
+                title={theme === 'light-blue' ? (language === 'nl' ? 'Donker thema' : 'Dark theme') : (language === 'nl' ? 'Licht Blauw thema' : 'Light Blue theme')}
+              >
+                {theme === 'light-blue' ? (
+                  <Sun className="w-4 h-4 text-amber-500 fill-amber-500/20" />
+                ) : (
+                  <Moon className="w-4 h-4 text-sky-400 fill-sky-400/20" />
+                )}
               </button>
             )}
             <button
@@ -177,6 +194,27 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <QrCode className="w-3.5 h-3.5 text-yellow-400" />
               <span className="hidden lg:inline">{language === 'nl' ? 'Mobiel QR' : 'Mobile QR'}</span>
+            </button>
+          )}
+
+          {/* Theme Toggle Button */}
+          {onToggleTheme && (
+            <button
+              onClick={onToggleTheme}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-bold text-white transition-colors shadow-sm cursor-pointer"
+              title={theme === 'light-blue' ? (language === 'nl' ? 'Schakel over naar Donker thema' : 'Switch to Dark theme') : (language === 'nl' ? 'Schakel over naar Licht Blauw thema' : 'Switch to Light Blue theme')}
+            >
+              {theme === 'light-blue' ? (
+                <>
+                  <Sun className="w-3.5 h-3.5 text-amber-500 fill-amber-500/20" />
+                  <span className="hidden lg:inline">{language === 'nl' ? 'Licht Blauw' : 'Light Blue'}</span>
+                </>
+              ) : (
+                <>
+                  <Moon className="w-3.5 h-3.5 text-sky-400 fill-sky-400/20" />
+                  <span className="hidden lg:inline">{language === 'nl' ? 'Donker' : 'Dark'}</span>
+                </>
+              )}
             </button>
           )}
 

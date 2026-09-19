@@ -88,3 +88,5 @@ export interface KeyAnalysisResult {
   bpm: number;             // e.g. 128
   compatibleKeys: string[]; // e.g. ["8A", "7A", "9A", "8B"]
 }
+
+export type AppTheme = 'light-blue' | 'dark';

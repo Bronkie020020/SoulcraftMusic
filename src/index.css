@@ -60,3 +60,168 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* ==========================================================================
+   Licht Blauw (Light Blue) Theme Styles
+   ========================================================================== */
+
+[data-theme="light-blue"],
+.theme-light-blue {
+  background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 40%, #f0f9ff 70%, #e0e7ff 100%) !important;
+  color: #0f172a !important;
+}
+
+body:has([data-theme="light-blue"]),
+body.theme-light-blue {
+  background: #eff6ff !important;
+  color: #0f172a !important;
+}
+
+/* Base Surfaces & Header */
+[data-theme="light-blue"] header,
+[data-theme="light-blue"] .bg-black {
+  background-color: rgba(255, 255, 255, 0.88) !important;
+  border-color: rgba(186, 230, 253, 0.85) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+[data-theme="light-blue"] .bg-black\/60,
+[data-theme="light-blue"] .bg-black\/95 {
+  background-color: rgba(240, 249, 255, 0.8) !important;
+  border-color: rgba(186, 230, 253, 0.8) !important;
+}
+
+/* Cards & Panels (Slate-900 / Zinc-900) */
+[data-theme="light-blue"] .bg-zinc-900,
+[data-theme="light-blue"] .bg-slate-900,
+[data-theme="light-blue"] .bg-zinc-900\/90,
+[data-theme="light-blue"] .bg-slate-900\/90,
+[data-theme="light-blue"] .bg-zinc-900\/80,
+[data-theme="light-blue"] .bg-slate-900\/80,
+[data-theme="light-blue"] .bg-zinc-900\/60,
+[data-theme="light-blue"] .bg-slate-900\/60 {
+  background-color: rgba(255, 255, 255, 0.92) !important;
+  border-color: rgba(186, 230, 253, 0.85) !important;
+  box-shadow: 0 10px 25px -5px rgba(56, 189, 248, 0.08), 0 8px 10px -6px rgba(56, 189, 248, 0.04) !important;
+}
+
+/* Inner Sections & Highlight Wells */
+[data-theme="light-blue"] .bg-zinc-950,
+[data-theme="light-blue"] .bg-slate-950,
+[data-theme="light-blue"] .bg-zinc-950\/60,
+[data-theme="light-blue"] .bg-slate-950\/60,
+[data-theme="light-blue"] .bg-zinc-950\/80,
+[data-theme="light-blue"] .bg-slate-950\/80 {
+  background-color: rgba(240, 249, 255, 0.85) !important;
+  border-color: rgba(186, 230, 253, 0.7) !important;
+}
+
+/* Buttons, Chips, Sub-panels (Zinc-800 / Slate-800) */
+[data-theme="light-blue"] .bg-zinc-800,
+[data-theme="light-blue"] .bg-slate-800,
+[data-theme="light-blue"] .bg-zinc-800\/50,
+[data-theme="light-blue"] .bg-slate-800\/50,
+[data-theme="light-blue"] .bg-zinc-800\/80,
+[data-theme="light-blue"] .bg-slate-800\/80 {
+  background-color: rgba(224, 242, 254, 0.7) !important;
+  border-color: rgba(186, 230, 253, 0.85) !important;
+  color: #0f172a !important;
+}
+
+[data-theme="light-blue"] .hover\:bg-zinc-800:hover,
+[data-theme="light-blue"] .hover\:bg-slate-800:hover,
+[data-theme="light-blue"] .hover\:bg-zinc-700:hover,
+[data-theme="light-blue"] .hover\:bg-slate-700:hover {
+  background-color: rgba(186, 230, 253, 0.75) !important;
+  color: #0f172a !important;
+}
+
+/* Borders */
+[data-theme="light-blue"] .border-zinc-800,
+[data-theme="light-blue"] .border-slate-800,
+[data-theme="light-blue"] .border-zinc-700,
+[data-theme="light-blue"] .border-slate-700,
+[data-theme="light-blue"] .border-zinc-850 {
+  border-color: rgba(186, 230, 253, 0.85) !important;
+}
+
+/* Typography & Contrast */
+[data-theme="light-blue"] .text-white {
+  color: #0f172a !important;
+}
+
+[data-theme="light-blue"] .text-slate-100,
+[data-theme="light-blue"] .text-zinc-100,
+[data-theme="light-blue"] .text-slate-200,
+[data-theme="light-blue"] .text-zinc-200 {
+  color: #1e293b !important;
+}
+
+[data-theme="light-blue"] .text-slate-300,
+[data-theme="light-blue"] .text-zinc-300 {
+  color: #334155 !important;
+}
+
+[data-theme="light-blue"] .text-slate-400,
+[data-theme="light-blue"] .text-zinc-400 {
+  color: #475569 !important;
+}
+
+[data-theme="light-blue"] .text-slate-500,
+[data-theme="light-blue"] .text-zinc-500 {
+  color: #64748b !important;
+}
+
+/* Inputs, Textareas, Forms */
+[data-theme="light-blue"] input,
+[data-theme="light-blue"] textarea,
+[data-theme="light-blue"] select {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: rgba(186, 230, 253, 0.9) !important;
+}
+
+[data-theme="light-blue"] input::placeholder,
+[data-theme="light-blue"] textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Fixed Bottom Audio Player Bar */
+[data-theme="light-blue"] .fixed.bottom-0 {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border-top-color: rgba(186, 230, 253, 0.9) !important;
+  box-shadow: 0 -4px 25px rgba(56, 189, 248, 0.15) !important;
+}
+
+/* Modal Backdrops */
+[data-theme="light-blue"] .bg-slate-950\/80,
+[data-theme="light-blue"] .bg-black\/80 {
+  background-color: rgba(15, 23, 42, 0.35) !important;
+}
+
+/* Preserve White Text on Solid Color Badges & Action Buttons */
+[data-theme="light-blue"] .bg-blue-600,
+[data-theme="light-blue"] .bg-blue-500,
+[data-theme="light-blue"] .bg-purple-600,
+[data-theme="light-blue"] .bg-purple-500,
+[data-theme="light-blue"] .bg-red-600,
+[data-theme="light-blue"] .bg-red-500,
+[data-theme="light-blue"] .bg-emerald-600,
+[data-theme="light-blue"] .bg-emerald-500,
+[data-theme="light-blue"] .bg-indigo-600 {
+  color: #ffffff !important;
+}
+
+[data-theme="light-blue"] .bg-blue-600 *,
+[data-theme="light-blue"] .bg-purple-600 *,
+[data-theme="light-blue"] .bg-red-600 *,
+[data-theme="light-blue"] .bg-emerald-600 * {
+  color: #ffffff !important;
+}
+
+/* Yellow Action Buttons Stay High Contrast */
+[data-theme="light-blue"] .bg-yellow-400,
+[data-theme="light-blue"] .bg-amber-400 {
+  color: #020617 !important;
+}

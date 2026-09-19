@@ -16,13 +16,31 @@ import { StorageCleanupModal } from './components/StorageCleanupModal';
 import { AddToPlaylistModal } from './components/AddToPlaylistModal';
 import { SmartPlaylistModal } from './components/SmartPlaylistModal';
 import { AudioAnalysisModal } from './components/AudioAnalysisModal';
-import { AppLanguage, MusicTrack, Platform, DownloadMetrics, Playlist } from './types';
+import { AppLanguage, AppTheme, MusicTrack, Platform, DownloadMetrics, Playlist } from './types';
 import { Play, Download, ListMusic, ShieldCheck, CheckCircle2, WifiOff, Library, HardDrive, AlertTriangle, Sparkles } from 'lucide-react';
 import { renderTrackToAudioBlob, triggerFileDownload } from './utils/audioEncoder';
 import { SAMPLE_LIBRARY_TRACKS, SAMPLE_PLAYLISTS } from './utils/sampleLibraryData';
 import { safeJsonStringify } from './utils/jsonUtils';
 
 export default function App() {
+  const [theme, setTheme] = useState<AppTheme>(() => {
+    try {
+      const saved = localStorage.getItem('soundstreamer_theme');
+      if (saved === 'dark' || saved === 'light-blue') return saved;
+    } catch (e) {}
+    return 'light-blue'; // Default to light-blue as requested!
+  });
+
+  const handleToggleTheme = () => {
+    setTheme((prev) => {
+      const next = prev === 'light-blue' ? 'dark' : 'light-blue';
+      try {
+        localStorage.setItem('soundstreamer_theme', next);
+      } catch (e) {}
+      return next;
+    });
+  };
+
   const [language, setLanguage] = useState<AppLanguage['code']>('nl');
   const [activeTab, setActiveTab] = useState<'downloader' | 'library'>('downloader');
     const [selectedPlatformFilter, setSelectedPlatformFilter] = useState<Platform | 'all'>('all');
@@ -558,7 +576,14 @@ export default function App() {
   });
 
   return (
-    <div className="min-h-screen min-h-[100dvh] bg-black text-slate-100 flex flex-col font-sans selection:bg-yellow-400 selection:text-slate-950">
+    <div
+      data-theme={theme}
+      className={`min-h-screen min-h-[100dvh] ${
+        theme === 'light-blue'
+          ? 'theme-light-blue bg-gradient-to-br from-sky-100 via-blue-50 to-indigo-100 text-slate-900'
+          : 'bg-black text-slate-100'
+      } flex flex-col font-sans selection:bg-yellow-400 selection:text-slate-950 transition-colors duration-300`}
+    >
       
       {/* Toast Notification for ID3 Auto-Enrichment */}
       {enrichToast && (
@@ -611,6 +636,8 @@ export default function App() {
         onOpenQRCode={() => setShowQRCodeModal(true)}
         onOpenStorageManagement={() => setShowStorageModal(true)}
         onOpenWindowsInstall={() => setShowWindowsInstallModal(true)}
+        theme={theme}
+        onToggleTheme={handleToggleTheme}
       />
 
 
