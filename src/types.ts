@@ -89,4 +89,4 @@ export interface KeyAnalysisResult {
   compatibleKeys: string[]; // e.g. ["8A", "7A", "9A", "8B"]
 }
 
-export type AppTheme = 'light-blue' | 'dark';
+export type AppTheme = 'light-purple' | 'light-blue' | 'dark';

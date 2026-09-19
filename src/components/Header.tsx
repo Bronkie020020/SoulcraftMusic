@@ -95,13 +95,15 @@ export const Header: React.FC<HeaderProps> = ({
             {onToggleTheme && (
               <button
                 onClick={onToggleTheme}
-                className="p-2 rounded-xl bg-white hover:bg-purple-50 border border-purple-200 text-xs font-bold transition-colors shadow-sm active:scale-95 min-h-[38px] min-w-[38px] flex items-center justify-center"
-                title={theme === 'light-blue' ? (language === 'nl' ? 'Donker thema' : 'Dark theme') : (language === 'nl' ? 'Licht Blauw thema' : 'Light Blue theme')}
+                className="p-2 rounded-xl bg-white hover:bg-purple-50 border border-purple-200 text-xs font-bold transition-colors shadow-sm active:scale-95 min-h-[38px] min-w-[38px] flex items-center justify-center cursor-pointer"
+                title={language === 'nl' ? 'Thema wisselen' : 'Switch theme'}
               >
-                {theme === 'light-blue' ? (
+                {theme === 'light-purple' ? (
+                  <Sparkles className="w-4 h-4 text-fuchsia-600 fill-fuchsia-600/30" />
+                ) : theme === 'light-blue' ? (
                   <Sun className="w-4 h-4 text-amber-500 fill-amber-500/20" />
                 ) : (
-                  <Moon className="w-4 h-4 text-purple-600 fill-purple-600/20" />
+                  <Moon className="w-4 h-4 text-zinc-400" />
                 )}
               </button>
             )}
@@ -205,18 +207,29 @@ export const Header: React.FC<HeaderProps> = ({
           {onToggleTheme && (
             <button
               onClick={onToggleTheme}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-purple-50 border border-purple-200 text-xs font-bold text-purple-950 transition-colors shadow-sm cursor-pointer"
-              title={theme === 'light-blue' ? (language === 'nl' ? 'Schakel over naar Donker thema' : 'Switch to Dark theme') : (language === 'nl' ? 'Schakel over naar Licht Blauw thema' : 'Switch to Light Blue theme')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shadow-sm cursor-pointer ${
+                theme === 'light-purple'
+                  ? 'bg-gradient-to-r from-purple-100 to-fuchsia-100 border-purple-300 text-purple-950 hover:brightness-105 shadow-purple-500/10'
+                  : theme === 'light-blue'
+                  ? 'bg-sky-50 border-sky-200 text-sky-950 hover:bg-sky-100'
+                  : 'bg-zinc-900 border-zinc-700 text-zinc-100 hover:bg-zinc-800'
+              }`}
+              title={language === 'nl' ? 'Thema wisselen (Licht Paars Neon / Licht Blauw / Donker)' : 'Switch theme (Light Purple Neon / Light Blue / Dark)'}
             >
-              {theme === 'light-blue' ? (
+              {theme === 'light-purple' ? (
+                <>
+                  <Sparkles className="w-3.5 h-3.5 text-fuchsia-600 fill-fuchsia-600/30 animate-pulse" />
+                  <span className="hidden lg:inline">{language === 'nl' ? 'Licht Paars Neon' : 'Light Purple Neon'}</span>
+                </>
+              ) : theme === 'light-blue' ? (
                 <>
                   <Sun className="w-3.5 h-3.5 text-amber-500 fill-amber-500/20" />
                   <span className="hidden lg:inline">{language === 'nl' ? 'Licht Blauw' : 'Light Blue'}</span>
                 </>
               ) : (
                 <>
-                  <Moon className="w-3.5 h-3.5 text-purple-600 fill-purple-600/20" />
-                  <span className="hidden lg:inline">{language === 'nl' ? 'Licht Paars' : 'Light Purple'}</span>
+                  <Moon className="w-3.5 h-3.5 text-zinc-400" />
+                  <span className="hidden lg:inline">{language === 'nl' ? 'Donker' : 'Dark'}</span>
                 </>
               )}
             </button>

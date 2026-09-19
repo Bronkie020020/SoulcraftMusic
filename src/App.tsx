@@ -26,24 +26,42 @@ export default function App() {
   const [theme, setTheme] = useState<AppTheme>(() => {
     try {
       const saved = localStorage.getItem('soundstreamer_theme');
-      if (saved === 'dark') {
-        localStorage.removeItem('soundstreamer_theme');
-      } else if (saved === 'light-blue') {
-        return saved;
+      if (saved === 'light-purple' || saved === 'light-blue' || saved === 'dark') {
+        return saved as AppTheme;
       }
     } catch (e) {}
-    return 'light-blue';
+    // Vaste standaardinstelling bij opstarten: Licht Paars Neon Thema
+    return 'light-purple';
   });
 
   const handleToggleTheme = () => {
     setTheme((prev) => {
-      const next = prev === 'light-blue' ? 'dark' : 'light-blue';
+      let next: AppTheme = 'light-purple';
+      if (prev === 'light-purple') next = 'light-blue';
+      else if (prev === 'light-blue') next = 'dark';
+      else next = 'light-purple';
       try {
         localStorage.setItem('soundstreamer_theme', next);
       } catch (e) {}
       return next;
     });
   };
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('soundstreamer_theme', theme);
+    } catch (e) {}
+    if (theme === 'light-purple') {
+      document.body.style.backgroundColor = '#f5f0ff';
+      document.body.style.color = '#3b0764';
+    } else if (theme === 'light-blue') {
+      document.body.style.backgroundColor = '#eff6ff';
+      document.body.style.color = '#0f172a';
+    } else {
+      document.body.style.backgroundColor = '#000000';
+      document.body.style.color = '#f1f5f9';
+    }
+  }, [theme]);
 
   const [language, setLanguage] = useState<AppLanguage['code']>('nl');
   const [activeTab, setActiveTab] = useState<'downloader' | 'library'>('downloader');
@@ -583,9 +601,11 @@ export default function App() {
     <div
       data-theme={theme}
       className={`min-h-screen min-h-[100dvh] ${
-        theme === 'light-blue'
+        theme === 'light-purple'
+          ? 'theme-light-purple bg-gradient-to-br from-[#faf7ff] via-[#f4ebff] to-[#ebe1fa] text-purple-950'
+          : theme === 'light-blue'
           ? 'theme-light-blue bg-gradient-to-br from-sky-100 via-blue-50 to-indigo-100 text-slate-900'
-          : 'bg-gradient-to-br from-[#faf7ff] via-[#f4ebff] to-[#ebe1fa] text-purple-950'
+          : 'bg-black text-slate-100'
       } flex flex-col font-sans selection:bg-fuchsia-400 selection:text-purple-950 transition-colors duration-300`}
     >
       
@@ -959,19 +979,33 @@ export default function App() {
       )}
 
       {/* Footer */}
-      <footer className="border-t border-zinc-800 bg-zinc-950 py-8 text-center text-xs text-zinc-400 space-y-3">
-        <p className="font-bold bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 bg-clip-text text-transparent">
+      <footer className={`border-t py-8 text-center text-xs space-y-3 ${
+        theme === 'light-purple'
+          ? 'border-purple-200 bg-white/90 text-purple-700'
+          : theme === 'light-blue'
+          ? 'border-sky-200 bg-white/90 text-slate-600'
+          : 'border-zinc-800 bg-zinc-950 text-zinc-400'
+      }`}>
+        <p className={`font-bold ${
+          theme === 'light-purple'
+            ? 'bg-gradient-to-r from-fuchsia-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent font-black'
+            : 'bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 bg-clip-text text-transparent'
+        }`}>
           Soulcraft Downloader & Studio Library • Spotify • SoundCloud • YouTube Music
         </p>
         <div className="flex items-center justify-center gap-3">
           <button
             onClick={() => setShowWindowsInstallModal(true)}
-            className="px-4 py-1.5 rounded-full bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-yellow-400 font-extrabold text-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+            className={`px-4 py-1.5 rounded-full border text-xs font-extrabold inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
+              theme === 'light-purple'
+                ? 'bg-purple-100 hover:bg-purple-200 border-purple-300 text-purple-900 shadow-sm'
+                : 'bg-zinc-900 hover:bg-zinc-800 border-zinc-700 text-yellow-400'
+            }`}
           >
             🖥️ {language === 'nl' ? 'Installeer als Vaste App op Mac & Windows' : 'Install as Standalone App on Mac & Windows'}
           </button>
         </div>
-        <p className="text-zinc-500">
+        <p className={theme === 'light-purple' ? 'text-purple-600/80' : 'text-zinc-500'}>
           Uitsluitend bestemd voor persoonlijk offline archiefgebruik en het beheren van uw eigen muziekcollectie.
         </p>
       </footer>

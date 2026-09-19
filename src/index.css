@@ -264,3 +264,184 @@ select {
   background-color: #ffffff !important;
   color: #0f172a !important;
 }
+
+/* ==========================================================================
+   Licht Paars Neon (Light Purple Neon) Theme Styles
+   ========================================================================== */
+
+[data-theme="light-purple"],
+.theme-light-purple {
+  background: linear-gradient(135deg, #faf7ff 0%, #f3e8ff 40%, #fae8ff 70%, #ede9fe 100%) !important;
+  color: #3b0764 !important;
+}
+
+body:has([data-theme="light-purple"]),
+body.theme-light-purple {
+  background: #f5f0ff !important;
+  color: #3b0764 !important;
+}
+
+/* Base Surfaces, Header & Footer */
+[data-theme="light-purple"] header,
+[data-theme="light-purple"] footer,
+[data-theme="light-purple"] .bg-black {
+  background-color: rgba(255, 255, 255, 0.92) !important;
+  border-color: rgba(216, 180, 254, 0.75) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+[data-theme="light-purple"] .bg-black\/60,
+[data-theme="light-purple"] .bg-black\/95 {
+  background-color: rgba(250, 245, 255, 0.85) !important;
+  border-color: rgba(216, 180, 254, 0.7) !important;
+}
+
+/* Cards & Panels (Slate-900 / Zinc-900) */
+[data-theme="light-purple"] .bg-zinc-900,
+[data-theme="light-purple"] .bg-slate-900,
+[data-theme="light-purple"] .bg-zinc-900\/90,
+[data-theme="light-purple"] .bg-slate-900\/90,
+[data-theme="light-purple"] .bg-zinc-900\/80,
+[data-theme="light-purple"] .bg-slate-900\/80,
+[data-theme="light-purple"] .bg-zinc-900\/60,
+[data-theme="light-purple"] .bg-slate-900\/60 {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border-color: rgba(216, 180, 254, 0.8) !important;
+  box-shadow: 0 10px 25px -5px rgba(168, 85, 247, 0.12), 0 8px 10px -6px rgba(217, 70, 239, 0.06) !important;
+}
+
+/* Inner Sections & Highlight Wells */
+[data-theme="light-purple"] .bg-zinc-950,
+[data-theme="light-purple"] .bg-slate-950,
+[data-theme="light-purple"] .bg-zinc-950\/60,
+[data-theme="light-purple"] .bg-slate-950\/60,
+[data-theme="light-purple"] .bg-zinc-950\/80,
+[data-theme="light-purple"] .bg-slate-950\/80 {
+  background-color: rgba(248, 244, 255, 0.9) !important;
+  border-color: rgba(216, 180, 254, 0.65) !important;
+}
+
+/* Buttons, Chips, Sub-panels (Zinc-800 / Slate-800) */
+[data-theme="light-purple"] .bg-zinc-800,
+[data-theme="light-purple"] .bg-slate-800,
+[data-theme="light-purple"] .bg-zinc-800\/50,
+[data-theme="light-purple"] .bg-slate-800\/50,
+[data-theme="light-purple"] .bg-zinc-800\/80,
+[data-theme="light-purple"] .bg-slate-800\/80 {
+  background-color: rgba(243, 232, 255, 0.8) !important;
+  border-color: rgba(216, 180, 254, 0.8) !important;
+  color: #4c1d95 !important;
+}
+
+[data-theme="light-purple"] .hover\:bg-zinc-800:hover,
+[data-theme="light-purple"] .hover\:bg-slate-800:hover,
+[data-theme="light-purple"] .hover\:bg-zinc-700:hover,
+[data-theme="light-purple"] .hover\:bg-slate-700:hover {
+  background-color: rgba(233, 213, 255, 0.9) !important;
+  color: #3b0764 !important;
+}
+
+/* Borders */
+[data-theme="light-purple"] .border-zinc-800,
+[data-theme="light-purple"] .border-slate-800,
+[data-theme="light-purple"] .border-zinc-700,
+[data-theme="light-purple"] .border-slate-700,
+[data-theme="light-purple"] .border-zinc-850 {
+  border-color: rgba(216, 180, 254, 0.75) !important;
+}
+
+/* Typography & Neon Contrast */
+[data-theme="light-purple"] .text-white {
+  color: #3b0764 !important;
+}
+
+[data-theme="light-purple"] .text-slate-100,
+[data-theme="light-purple"] .text-zinc-100,
+[data-theme="light-purple"] .text-slate-200,
+[data-theme="light-purple"] .text-zinc-200 {
+  color: #4c1d95 !important;
+}
+
+[data-theme="light-purple"] .text-slate-300,
+[data-theme="light-purple"] .text-zinc-300 {
+  color: #581c87 !important;
+}
+
+[data-theme="light-purple"] .text-slate-400,
+[data-theme="light-purple"] .text-zinc-400 {
+  color: #6b21a8 !important;
+}
+
+[data-theme="light-purple"] .text-slate-500,
+[data-theme="light-purple"] .text-zinc-500 {
+  color: #7e22ce !important;
+}
+
+/* Inputs, Textareas, Forms */
+[data-theme="light-purple"] input,
+[data-theme="light-purple"] textarea,
+[data-theme="light-purple"] select {
+  background-color: #ffffff !important;
+  color: #3b0764 !important;
+  border-color: rgba(216, 180, 254, 0.9) !important;
+}
+
+[data-theme="light-purple"] input::placeholder,
+[data-theme="light-purple"] textarea::placeholder {
+  color: #a855f7 !important;
+}
+
+/* Fixed Bottom Audio Player Bar */
+[data-theme="light-purple"] .fixed.bottom-0 {
+  background-color: rgba(255, 255, 255, 0.96) !important;
+  border-top-color: rgba(216, 180, 254, 0.9) !important;
+  box-shadow: 0 -4px 25px rgba(168, 85, 247, 0.15) !important;
+}
+
+/* Modal Backdrops */
+[data-theme="light-purple"] .bg-slate-950\/80,
+[data-theme="light-purple"] .bg-black\/80 {
+  background-color: rgba(59, 7, 100, 0.35) !important;
+}
+
+/* Solid Neon Accent Buttons & Badges */
+[data-theme="light-purple"] .bg-purple-600,
+[data-theme="light-purple"] .bg-purple-500,
+[data-theme="light-purple"] .bg-fuchsia-600,
+[data-theme="light-purple"] .bg-fuchsia-500,
+[data-theme="light-purple"] .bg-rose-600,
+[data-theme="light-purple"] .bg-rose-500,
+[data-theme="light-purple"] .bg-emerald-600,
+[data-theme="light-purple"] .bg-emerald-500 {
+  color: #ffffff !important;
+}
+
+[data-theme="light-purple"] .bg-purple-600 *,
+[data-theme="light-purple"] .bg-purple-500 *,
+[data-theme="light-purple"] .bg-fuchsia-600 *,
+[data-theme="light-purple"] .bg-fuchsia-500 * {
+  color: #ffffff !important;
+}
+
+/* Neon Glow effects for primary actions */
+[data-theme="light-purple"] .shadow-fuchsia-500\/30,
+[data-theme="light-purple"] .shadow-fuchsia-500\/20 {
+  box-shadow: 0 4px 18px rgba(217, 70, 239, 0.38) !important;
+}
+
+[data-theme="light-purple"] .quality-badge-hd {
+  background-color: rgba(254, 243, 199, 0.95) !important;
+  border-color: rgba(245, 158, 11, 0.5) !important;
+  color: #b45309 !important;
+}
+
+[data-theme="light-purple"] select {
+  color: #3b0764 !important;
+}
+
+[data-theme="light-purple"] select option {
+  background-color: #ffffff !important;
+  color: #3b0764 !important;
+}
+
