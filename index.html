@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="nl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=5.0" />
+    <title>Soulcraft Downloader - High-Fidelity Music Downloader</title>
+    <meta name="theme-color" content="#000000" />
+    <meta name="description" content="Soulcraft Downloader - Download, beheer en organiseer muziek van Spotify, SoundCloud & YouTube Music in hoge kwaliteit (320kbps MP3 / FLAC / WAV / M4A)." />
+    
+    <script>
+      // Immediately unregister any legacy service workers and clear caches
+      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+        try {
+          navigator.serviceWorker.getRegistrations().then(function(registrations) {
+            for (var i = 0; i < registrations.length; i++) {
+              registrations[i].unregister();
+            }
+          });
+        } catch (e) {}
+      }
+      if (typeof window !== 'undefined' && 'caches' in window) {
+        try {
+          caches.keys().then(function(names) {
+            for (var i = 0; i < names.length; i++) {
+              caches.delete(names[i]);
+            }
+          });
+        } catch (e) {}
+      }
+    </script>
+
+    <!-- iOS / Apple Web App Capabilities & High-Res Icons -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Soulcraft Downloader" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="apple-touch-fullscreen" content="yes" />
+    
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <link rel="apple-touch-icon" href="/logo.png" />
+  </head>
+  <body class="bg-black text-slate-100 min-h-screen min-h-[100dvh] antialiased selection:bg-amber-400 selection:text-slate-950 overflow-x-hidden">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
