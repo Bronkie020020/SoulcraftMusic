@@ -51,12 +51,13 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="flex items-center gap-3">
             <div
               onClick={() => setActiveTab('downloader')}
-              className="relative flex items-center justify-center w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-white border border-amber-500/40 shadow-lg shadow-amber-500/10 group cursor-pointer shrink-0 overflow-hidden ring-1 ring-amber-400/20"
+              className="relative flex items-center justify-center w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-zinc-950 border border-purple-500/40 shadow-lg shadow-purple-900/30 group cursor-pointer shrink-0 overflow-hidden ring-1 ring-amber-400/40"
+              title="Soulcraft Downloader"
             >
               <img
-                src="/logo.png"
+                src="/logo.png?v=2"
                 alt="Soulcraft Logo"
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300 rounded-2xl"
                 onError={(e) => {
                   // Fallback to SVG if png not loaded
                   (e.target as HTMLImageElement).src = '/icon.svg';

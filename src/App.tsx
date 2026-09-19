@@ -16,6 +16,7 @@ import { StorageCleanupModal } from './components/StorageCleanupModal';
 import { AddToPlaylistModal } from './components/AddToPlaylistModal';
 import { SmartPlaylistModal } from './components/SmartPlaylistModal';
 import { AudioAnalysisModal } from './components/AudioAnalysisModal';
+import { StartupSplashScreen } from './components/StartupSplashScreen';
 import { AppLanguage, AppTheme, MusicTrack, Platform, DownloadMetrics, Playlist } from './types';
 import { Play, Download, ListMusic, ShieldCheck, CheckCircle2, WifiOff, Library, HardDrive, AlertTriangle, Sparkles } from 'lucide-react';
 import { renderTrackToAudioBlob, triggerFileDownload } from './utils/audioEncoder';
@@ -23,6 +24,7 @@ import { SAMPLE_LIBRARY_TRACKS, SAMPLE_PLAYLISTS } from './utils/sampleLibraryDa
 import { safeJsonStringify } from './utils/jsonUtils';
 
 export default function App() {
+  const [showSplashScreen, setShowSplashScreen] = useState<boolean>(true);
   const [theme, setTheme] = useState<AppTheme>(() => {
     try {
       const saved = localStorage.getItem('soundstreamer_theme');
@@ -764,11 +766,25 @@ export default function App() {
                 </div>
 
                 {isSearching ? (
-                  <div className="p-12 text-center bg-zinc-900/90 rounded-3xl border border-zinc-800 space-y-3 animate-pulse">
-                    <div className="w-12 h-12 rounded-full border-4 border-yellow-400 border-t-transparent animate-spin mx-auto"></div>
-                    <p className="text-sm font-semibold text-zinc-300">
-                      Afspeellijst & track informatie ophalen van Spotify, SoundCloud & YouTube Music...
-                    </p>
+                  <div className="p-10 text-center bg-zinc-900/90 rounded-3xl border border-zinc-800 space-y-4 animate-pulse shadow-xl shadow-purple-950/20">
+                    <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
+                      <div className="absolute inset-0 rounded-full bg-purple-600/30 blur-md animate-ping" />
+                      <img
+                        src="/logo.png?v=2"
+                        alt="Soulcraft Engine Laden..."
+                        className="w-14 h-14 rounded-full object-cover border-2 border-amber-400 shadow-lg shadow-purple-500/40 animate-[spin_6s_linear_infinite]"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-base font-extrabold bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 bg-clip-text text-transparent">
+                        Soulcraft Studio Master Engine
+                      </p>
+                      <p className="text-sm font-semibold text-zinc-300">
+                        {language === 'nl'
+                          ? 'Afspeellijst & track informatie ophalen van Spotify, SoundCloud & YouTube Music...'
+                          : 'Fetching playlist & track metadata from Spotify, SoundCloud & YouTube Music...'}
+                      </p>
+                    </div>
                   </div>
                 ) : filteredSearchTracks.length === 0 ? (
                   <div className="p-10 text-center bg-zinc-900/80 rounded-3xl border border-zinc-800 text-zinc-400">
@@ -975,6 +991,15 @@ export default function App() {
           deferredPrompt={deferredPrompt}
           onTriggerPwaInstall={handleTriggerPwaInstall}
           onClose={() => setShowWindowsInstallModal(false)}
+        />
+      )}
+
+      {/* Startup Splash Screen */}
+      {showSplashScreen && (
+        <StartupSplashScreen
+          onComplete={() => setShowSplashScreen(false)}
+          theme={theme}
+          language={language as 'nl' | 'en'}
         />
       )}
 
