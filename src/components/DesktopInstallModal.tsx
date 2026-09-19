@@ -55,7 +55,7 @@ export const DesktopInstallModal: React.FC<DesktopInstallModalProps> = ({
 
   // Download a Windows Internet Shortcut (.url file)
   const handleDownloadWindowsShortcut = () => {
-    const shortcutContent = `[InternetShortcut]\nURL=${currentAppUrl}\nIDList=\nHotKey=0\nIconFile=${window.location.origin}/icon.svg\nIconIndex=0\n`;
+    const shortcutContent = `[InternetShortcut]\nURL=${currentAppUrl}\nIDList=\nHotKey=0\nIconFile=${window.location.origin}/favicon.ico\nIconIndex=0\n`;
     const blob = new Blob([shortcutContent], { type: 'application/x-mswinurl' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

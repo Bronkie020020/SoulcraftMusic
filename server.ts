@@ -596,6 +596,27 @@ app.get(['/logo.png', '/logo.jpg'], (_req, res) => {
   }
 });
 
+app.get(['/favicon.ico', '/favicon.png'], (_req, res) => {
+  const icoPath = path.join(process.cwd(), 'public', 'favicon.ico');
+  if (fs.existsSync(icoPath)) {
+    res.setHeader('Content-Type', 'image/x-icon');
+    res.sendFile(icoPath);
+  } else {
+    res.status(404).send('Favicon not found');
+  }
+});
+
+app.get(['/icon-192.png', '/icon-512.png'], (req, res) => {
+  const iconName = req.path.replace(/^\//, '');
+  const iconPath = path.join(process.cwd(), 'public', iconName);
+  if (fs.existsSync(iconPath)) {
+    res.setHeader('Content-Type', 'image/png');
+    res.sendFile(iconPath);
+  } else {
+    res.status(404).send('Icon not found');
+  }
+});
+
 // Cycle-safe JSON serializer for Express res.json
 let expressJsonSeen = new WeakSet();
 app.set('json replacer', (key: string, value: any) => {
