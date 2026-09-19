@@ -35,14 +35,14 @@ export const QualityBadge = ({ url }: { url: string }) => {
   }
 
   return (
-    <span className={`shrink-0 px-2.5 py-1 rounded-xl border text-[11px] font-bold flex items-center gap-1 ${
+    <span className={`shrink-0 px-2.5 py-1 rounded-xl border text-[11px] font-bold flex items-center gap-1 shadow-sm transition-colors ${
       quality === 'HD' 
-        ? 'bg-yellow-400/10 border-yellow-400/30 text-yellow-300' 
+        ? 'quality-badge-hd bg-amber-400/15 border-amber-400/35 text-amber-600 dark:bg-yellow-400/10 dark:border-yellow-400/30 dark:text-yellow-300' 
         : 'bg-slate-800 border-slate-700 text-slate-300'
     }`}>
-      {quality === 'HD' ? <Zap className="w-3 h-3 text-yellow-400" /> : <Activity className="w-3 h-3" />}
-      {quality === 'HD' ? 'HD' : 'Standard'}
-      {bitrate && <span className="opacity-75 font-mono text-[9px] ml-0.5">{bitrate} kbps</span>}
+      {quality === 'HD' ? <Zap className="w-3 h-3 text-amber-500 dark:text-yellow-400" /> : <Activity className="w-3 h-3" />}
+      <span>{quality === 'HD' ? 'HD' : 'Standard'}</span>
+      {bitrate && <span className="opacity-90 font-mono text-[9px] ml-0.5 font-bold">{bitrate} kbps</span>}
     </span>
   );
 };

@@ -1456,7 +1456,7 @@ app.get('/api/download', async (req, res) => {
       ffmpegCmd = `${ffmpegBin} -y -threads 0 -i "${tmpInput}" ${metadataArgs} -ar 44100 -ac 2 -sample_fmt s16 "${tmpOutput}"`;
     } else if (ext === 'flac') {
       if (hasCoverImage) {
-        ffmpegCmd = `${ffmpegBin} -y -threads 0 -i "${tmpInput}" -i "${tmpCover}" -map 0:a -map 1:v -c:a flac -compression_level 2 -c:v copy ${metadataArgs} -ar 44100 -ac 2 "${tmpOutput}"`;
+        ffmpegCmd = `${ffmpegBin} -y -threads 0 -i "${tmpInput}" -i "${tmpCover}" -map 0:a -map 1:v -c:a flac -compression_level 2 -c:v copy -disposition:v:0 attached_pic -metadata:s:v title="Album cover" -metadata:s:v comment="Cover (front)" ${metadataArgs} -ar 44100 -ac 2 "${tmpOutput}"`;
       } else {
         ffmpegCmd = `${ffmpegBin} -y -threads 0 -i "${tmpInput}" ${metadataArgs} -ar 44100 -ac 2 -c:a flac -compression_level 2 "${tmpOutput}"`;
       }
@@ -1473,7 +1473,11 @@ app.get('/api/download', async (req, res) => {
     } catch (ffmpegErr) {
       console.warn('FFmpeg transcode warning, retrying basic transcode without cover:', ffmpegErr);
       try {
-        const fallbackCmd = `${ffmpegBin} -y -threads 0 -i "${tmpInput}" ${metadataArgs} -ar 44100 -ac 2 -c:a libmp3lame -b:a 320k "${tmpOutput}"`;
+        let fallbackCodecArgs = '-c:a libmp3lame -b:a 320k -q:a 0';
+        if (ext === 'flac') fallbackCodecArgs = '-c:a flac -compression_level 2';
+        else if (ext === 'wav') fallbackCodecArgs = '-sample_fmt s16';
+        else if (ext === 'm4a') fallbackCodecArgs = '-c:a aac -b:a 256k';
+        const fallbackCmd = `${ffmpegBin} -y -threads 0 -i "${tmpInput}" ${metadataArgs} -ar 44100 -ac 2 ${fallbackCodecArgs} "${tmpOutput}"`;
         await execAsync(fallbackCmd);
       } catch (fbErr) {
         console.warn('FFmpeg fallback transcode error, serving source audio:', fbErr);

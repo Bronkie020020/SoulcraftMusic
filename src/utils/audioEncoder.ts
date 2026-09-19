@@ -417,6 +417,20 @@ export async function renderTrackToAudioBlob(
 
       console.info(`[AudioStream Engine] Received HTTP response in ${(performance.now() - fetchStartTime).toFixed(0)}ms: status=${response.status} ${response.statusText}, Content-Type="${response.headers.get('content-type')}", Content-Length="${response.headers.get('content-length')}"`);
 
+      if (!response.ok) {
+        let serverErrorText = '';
+        try {
+          const errJson = await response.json();
+          serverErrorText = errJson.error || JSON.stringify(errJson);
+        } catch (_) {
+          serverErrorText = await response.text().catch(() => response.statusText);
+        }
+        console.warn(`[AudioStream Engine] Server returned error ${response.status}: ${serverErrorText}`);
+        attempt++;
+        await new Promise((resolve) => setTimeout(resolve, 300 * attempt));
+        continue;
+      }
+
       if (response.ok && response.body) {
         const contentType = response.headers.get('content-type') || '';
         // Ensure we received an actual audio response and not a JSON error payload

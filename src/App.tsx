@@ -26,9 +26,13 @@ export default function App() {
   const [theme, setTheme] = useState<AppTheme>(() => {
     try {
       const saved = localStorage.getItem('soundstreamer_theme');
-      if (saved === 'dark' || saved === 'light-blue') return saved;
+      if (saved === 'dark') {
+        localStorage.removeItem('soundstreamer_theme');
+      } else if (saved === 'light-blue') {
+        return saved;
+      }
     } catch (e) {}
-    return 'light-blue'; // Default to light-blue as requested!
+    return 'light-blue';
   });
 
   const handleToggleTheme = () => {
@@ -581,8 +585,8 @@ export default function App() {
       className={`min-h-screen min-h-[100dvh] ${
         theme === 'light-blue'
           ? 'theme-light-blue bg-gradient-to-br from-sky-100 via-blue-50 to-indigo-100 text-slate-900'
-          : 'bg-black text-slate-100'
-      } flex flex-col font-sans selection:bg-yellow-400 selection:text-slate-950 transition-colors duration-300`}
+          : 'bg-gradient-to-br from-[#faf7ff] via-[#f4ebff] to-[#ebe1fa] text-purple-950'
+      } flex flex-col font-sans selection:bg-fuchsia-400 selection:text-purple-950 transition-colors duration-300`}
     >
       
       {/* Toast Notification for ID3 Auto-Enrichment */}

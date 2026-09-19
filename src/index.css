@@ -17,6 +17,9 @@
   body {
     min-height: 100vh;
     min-height: 100dvh;
+    background: linear-gradient(135deg, #faf7ff 0%, #f4ebff 50%, #ebe1fa 100%) !important;
+    background-color: #f5f0ff !important;
+    color: #1e1b4b;
     padding-top: env(safe-area-inset-top, 0px);
     padding-left: env(safe-area-inset-left, 0px);
     padding-right: env(safe-area-inset-right, 0px);
@@ -224,4 +227,40 @@ body.theme-light-blue {
 [data-theme="light-blue"] .bg-yellow-400,
 [data-theme="light-blue"] .bg-amber-400 {
   color: #020617 !important;
+}
+
+/* Rose / Error Button Text */
+[data-theme="light-blue"] .bg-rose-600,
+[data-theme="light-blue"] .bg-rose-500 {
+  color: #ffffff !important;
+}
+[data-theme="light-blue"] .bg-rose-600 *,
+[data-theme="light-blue"] .bg-rose-500 * {
+  color: #ffffff !important;
+}
+
+/* HD Quality Badge in Light Theme */
+[data-theme="light-blue"] .quality-badge-hd {
+  background-color: rgba(254, 243, 199, 0.9) !important;
+  border-color: rgba(245, 158, 11, 0.45) !important;
+  color: #b45309 !important;
+}
+[data-theme="light-blue"] .quality-badge-hd svg {
+  color: #d97706 !important;
+}
+
+/* Select Form Controls Reset for Smooth Cross-Platform Look */
+select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+[data-theme="light-blue"] select {
+  color: #0f172a !important;
+}
+
+[data-theme="light-blue"] select option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
 }

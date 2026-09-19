@@ -15,6 +15,7 @@ import {
   Clock,
   Gauge,
   FolderPlus,
+  ChevronDown,
 } from 'lucide-react';
 import { AppLanguage, MusicTrack, DownloadMetrics } from '../types';
 import { QualityBadge } from './QualityBadge';
@@ -247,12 +248,12 @@ export const TrackCard: React.FC<TrackCardProps> = ({
         <div className="flex flex-col gap-2.5 sm:border-l sm:border-slate-800/80 sm:pl-4">
           <div className="flex flex-wrap items-center justify-between sm:justify-start gap-2 pt-2 sm:pt-0 border-t border-slate-800/80 sm:border-t-0">
             {/* Format Picker */}
-            <div className="flex items-center gap-1 bg-slate-950/80 px-2 py-1.5 rounded-xl border border-slate-800 text-xs">
-              <FileAudio className="w-3.5 h-3.5 text-slate-400" />
+            <div className="relative flex items-center h-9 bg-slate-800/80 hover:bg-slate-700/80 px-2.5 rounded-xl border border-slate-700/80 transition-all text-xs shadow-sm group cursor-pointer">
+              <FileAudio className="w-3.5 h-3.5 text-slate-400 group-hover:text-yellow-400 shrink-0 pointer-events-none mr-1.5 transition-colors" />
               <select
                 value={selectedFormat}
                 onChange={(e) => setSelectedFormat(e.target.value as any)}
-                className="bg-transparent text-slate-200 font-semibold outline-none text-[11px] sm:text-xs cursor-pointer pr-1"
+                className="appearance-none bg-transparent text-slate-200 font-bold outline-none text-[11px] sm:text-xs cursor-pointer pr-5 py-1 z-10"
               >
                 <option value="mp3-320" className="bg-slate-900 text-white">MP3 - 320k</option>
                 <option value="mp3-256" className="bg-slate-900 text-white">AAC - 256k</option>
@@ -260,6 +261,7 @@ export const TrackCard: React.FC<TrackCardProps> = ({
                 <option value="wav" className="bg-slate-900 text-white">WAV - Pure</option>
                 <option value="flac" className="bg-slate-900 text-white">FLAC - HD</option>
               </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-200 absolute right-2 pointer-events-none transition-colors" />
             </div>
 
             {/* Sub Action Icons (ID3 edit, Lyrics, Converter, Playlist) */}
@@ -267,32 +269,32 @@ export const TrackCard: React.FC<TrackCardProps> = ({
               {onOpenAddToPlaylist && (
                 <button
                   onClick={() => onOpenAddToPlaylist(track)}
-                  className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-yellow-300 hover:text-yellow-200 transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center active:scale-95"
+                  className="h-9 w-9 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-yellow-400 hover:text-yellow-300 border border-slate-700/80 transition-colors flex items-center justify-center active:scale-95 shadow-sm"
                   title="Toevoegen aan Afspeellijst"
                 >
-                  <FolderPlus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <FolderPlus className="w-4 h-4" />
                 </button>
               )}
               <button
                 onClick={() => onOpenTagEditor(track)}
-                className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center active:scale-95"
+                className="h-9 w-9 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 transition-colors flex items-center justify-center active:scale-95 shadow-sm"
                 title={t.editTags}
               >
-                <Edit3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <Edit3 className="w-4 h-4" />
               </button>
               <button
                 onClick={() => onOpenLyrics(track)}
-                className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center active:scale-95"
+                className="h-9 w-9 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 transition-colors flex items-center justify-center active:scale-95 shadow-sm"
                 title={t.viewLyrics}
               >
-                <Mic2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <Mic2 className="w-4 h-4" />
               </button>
               <button
                 onClick={() => onOpenCrossLinks(track)}
-                className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center active:scale-95"
+                className="h-9 w-9 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 transition-colors flex items-center justify-center active:scale-95 shadow-sm"
                 title={t.convertLink}
               >
-                <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <Share2 className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -302,9 +304,10 @@ export const TrackCard: React.FC<TrackCardProps> = ({
             <button
               onClick={() => onDownload(track, selectedFormat)}
               disabled={downloadStatus === 'converting' || downloadStatus === 'fetching' || downloadStatus === 'encoding'}
-              className={`w-full sm:w-auto px-5 sm:px-6 py-2.5 sm:py-3 rounded-2xl font-black text-xs sm:text-sm hover:brightness-110 active:scale-95 disabled:opacity-50 transition-all shadow-md flex items-center justify-center gap-2 min-h-[42px] ${
+              title={downloadStatus === 'error' ? (language === 'nl' ? 'Download mislukt. Klik om opnieuw te proberen' : 'Download failed. Click to retry') : undefined}
+              className={`w-full sm:w-auto px-5 sm:px-6 py-2.5 sm:py-3 rounded-2xl font-black text-xs sm:text-sm hover:brightness-105 active:scale-95 disabled:opacity-50 transition-all shadow-md flex items-center justify-center gap-2 min-h-[42px] cursor-pointer ${
                 downloadStatus === 'error'
-                  ? 'bg-red-500 text-white shadow-red-500/20'
+                  ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-500/25 ring-2 ring-rose-400/20'
                   : 'bg-gradient-to-r from-yellow-400 via-yellow-300 to-cyan-400 text-slate-950 shadow-yellow-400/20'
               }`}
             >

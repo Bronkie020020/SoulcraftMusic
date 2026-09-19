@@ -62,8 +62,8 @@ export const SearchSection: React.FC<SearchSectionProps> = ({
                 onClick={() => setSelectedPlatformFilter(plt)}
                 className={`px-3 py-1.5 rounded-full capitalize transition-all shrink-0 min-h-[32px] flex items-center gap-1 ${
                   selectedPlatformFilter === plt
-                    ? 'bg-yellow-400 text-black font-black shadow-sm'
-                    : 'bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-800'
+                    ? 'bg-gradient-to-r from-fuchsia-600 to-purple-600 text-white font-black shadow-md shadow-fuchsia-500/20'
+                    : 'bg-white border border-purple-200 text-purple-900 hover:bg-purple-50'
                 }`}
               >
                 <span>{plt === 'all' ? (language === 'nl' ? 'Alle' : 'All') : plt}</span>
@@ -77,15 +77,15 @@ export const SearchSection: React.FC<SearchSectionProps> = ({
             <div className="relative flex items-center group">
               <div className="absolute left-3.5 sm:left-4 z-10 flex items-center gap-1.5 text-zinc-400 pointer-events-none">
                 {detectedPlatform === 'spotify' && (
-                  <span className="flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-yellow-400 text-black font-black text-[9px] sm:text-[10px] animate-pulse">SP</span>
+                  <span className="flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-emerald-500 text-white font-black text-[9px] sm:text-[10px] animate-pulse">SP</span>
                 )}
                 {detectedPlatform === 'soundcloud' && (
-                  <span className="flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-amber-500 text-black font-black text-[9px] sm:text-[10px] animate-pulse">SC</span>
+                  <span className="flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-amber-500 text-white font-black text-[9px] sm:text-[10px] animate-pulse">SC</span>
                 )}
                 {detectedPlatform === 'youtube' && (
                   <span className="flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-red-500 text-white font-black text-[9px] sm:text-[10px] animate-pulse">YT</span>
                 )}
-                {!detectedPlatform && <LinkIcon className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-400" />}
+                {!detectedPlatform && <LinkIcon className="w-4 h-4 sm:w-5 sm:h-5 text-fuchsia-600" />}
               </div>
               <input
                 type="text"
@@ -95,16 +95,16 @@ export const SearchSection: React.FC<SearchSectionProps> = ({
                 autoCorrect="off"
                 spellCheck={false}
                 placeholder="Plak Spotify/SoundCloud URL of zoek titel..."
-                className="w-full pl-11 sm:pl-14 pr-24 sm:pr-32 py-3.5 sm:py-4 rounded-2xl bg-zinc-900 border border-zinc-800 text-white placeholder-zinc-500 outline-none focus:border-yellow-400 focus:bg-zinc-900/90 transition-all shadow-inner shadow-black/40 text-xs sm:text-base font-medium"
+                className="w-full pl-11 sm:pl-14 pr-24 sm:pr-32 py-3.5 sm:py-4 rounded-2xl bg-white border-2 border-purple-200 text-purple-950 placeholder-purple-400 outline-none focus:border-fuchsia-500 transition-all shadow-sm text-xs sm:text-base font-medium"
               />
               <div className="absolute right-1.5 sm:right-2 flex items-center gap-2">
                 <button
                   type="submit"
                   disabled={isLoading || !query.trim()}
-                  className="px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl bg-yellow-400 hover:bg-yellow-300 text-black font-black text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md shadow-yellow-400/20 active:scale-95 min-h-[38px] flex items-center justify-center"
+                  className="px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white font-black text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md shadow-fuchsia-500/30 active:scale-95 min-h-[38px] flex items-center justify-center"
                 >
                   {isLoading ? (
-                    <span className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
+                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
                   ) : (
                     <span>Zoeken</span>
                   )}
