@@ -5,6 +5,7 @@ export interface StoredPlaylist {
   id: string;
   name: string;
   coverUrl?: string;
+  totalTracks?: number;
   createdAt: number;
   description?: string;
   color?: string;

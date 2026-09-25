@@ -552,9 +552,12 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {playlists.map((pl) => {
-            const tracksInPl = pl.trackIds
+            const idSet = new Set(pl.trackIds || []);
+            const ordered = (pl.trackIds || [])
               .map((id) => library.find((t) => t.id === id))
               .filter(Boolean) as MusicTrack[];
+            const additional = library.filter((t) => t.playlistId === pl.id && !idSet.has(t.id));
+            const tracksInPl = [...ordered, ...additional];
             const totalDuration = tracksInPl.reduce((acc, curr) => acc + (curr.duration || 180), 0);
             const avgBpm =
               tracksInPl.length > 0
