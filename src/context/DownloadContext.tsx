@@ -307,7 +307,7 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
           ...track,
           isDownloaded: true,
           format: result.ext,
-          fileSizeMb: storedTrack.fileSizeMb,
+          fileSizeMb: storedTrack.fileSizeMb || 0,
         });
       }
     } catch (err: any) {

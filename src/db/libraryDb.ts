@@ -220,7 +220,7 @@ export async function getTrackById(id: string): Promise<StoredTrack | undefined>
  */
 export async function getTrackBlob(id: string): Promise<Blob | null> {
   const track = await getTrackById(id);
-  return track ? track.audioBlob : null;
+  return track?.audioBlob || null;
 }
 
 /**
@@ -261,7 +261,7 @@ export function convertStoredTrackToMusicTrack(stored: StoredTrack): MusicTrack 
     streamUrl,
     bitrate: '320kbps',
     format: stored.format || 'mp3',
-    fileSizeMb: stored.fileSizeMb || Number((stored.audioBlob.size / (1024 * 1024)).toFixed(2)),
+    fileSizeMb: stored.fileSizeMb || (stored.audioBlob ? Number((stored.audioBlob.size / (1024 * 1024)).toFixed(2)) : 0),
     isDownloaded: true,
     playlistId: stored.playlistId,
     downloadedAt: new Date(stored.savedAt).toISOString(),

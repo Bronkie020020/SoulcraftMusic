@@ -1266,9 +1266,10 @@ async function fetchFullLengthAudioBuffer(
 
     if (ytTargetUrl) {
       const streamInfo = await play.stream(ytTargetUrl).catch(() => null);
-      if (streamInfo && streamInfo.url) {
+      const streamMediaUrl = (streamInfo as any)?.url;
+      if (streamInfo && streamMediaUrl) {
         const tmpYt = path.join(os.tmpdir(), `yt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}.mp3`);
-        await execAsync(`${ffmpegBin} -y -threads 0 -rw_timeout 15000000 -i "${streamInfo.url}" -c:a libmp3lame -b:a 320k -q:a 0 "${tmpYt}"`);
+        await execAsync(`${ffmpegBin} -y -threads 0 -rw_timeout 15000000 -i "${streamMediaUrl}" -c:a libmp3lame -b:a 320k -q:a 0 "${tmpYt}"`);
         if (fs.existsSync(tmpYt)) {
           const buf = await fs.promises.readFile(tmpYt);
           try { fs.unlinkSync(tmpYt); } catch (_) {}
