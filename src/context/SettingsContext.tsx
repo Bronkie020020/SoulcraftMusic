@@ -21,7 +21,7 @@ export interface SettingsContextType {
   chooseDirectory: () => Promise<boolean>;
   resetDirectory: () => Promise<void>;
   getEffectiveFormatString: () => string;
-  writeBlobToLocalFolder: (filename: string, blob: Blob) => Promise<boolean>;
+  writeBlobToLocalFolder: (filename: string, blob: Blob, subfolder?: string) => Promise<boolean>;
 }
 
 const SETTINGS_STORAGE_KEYS = {
@@ -232,8 +232,8 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     return `${format}-${quality}`;
   }, [format, quality]);
 
-  // Writes directly to the user-selected local directory if available
-  const writeBlobToLocalFolder = useCallback(async (filename: string, blob: Blob): Promise<boolean> => {
+  // Writes directly to the user-selected local directory if available, optionally inside a subfolder
+  const writeBlobToLocalFolder = useCallback(async (filename: string, blob: Blob, subfolder?: string): Promise<boolean> => {
     if (!directoryHandle) return false;
 
     try {
@@ -249,7 +249,13 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
         }
       }
 
-      const fileHandle = await directoryHandle.getFileHandle(filename, { create: true });
+      let targetDir = directoryHandle;
+      if (subfolder && subfolder.trim()) {
+        const cleanSub = subfolder.trim().replace(/[/\\?%*:|"<>]/g, '_');
+        targetDir = await (directoryHandle as any).getDirectoryHandle(cleanSub, { create: true });
+      }
+
+      const fileHandle = await (targetDir as any).getFileHandle(filename, { create: true });
       const writable = await (fileHandle as any).createWritable();
       await writable.write(blob);
       await writable.close();

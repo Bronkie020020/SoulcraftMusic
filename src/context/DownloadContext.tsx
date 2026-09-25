@@ -9,6 +9,7 @@ import { useSettings } from './SettingsContext';
 export interface QueuedDownload {
   track: MusicTrack;
   playlistId: string;
+  playlistName?: string;
   format: string;
   enqueuedAt: number;
 }
@@ -17,6 +18,7 @@ export interface ActiveDownloadProgress {
   trackId: string;
   track: MusicTrack;
   playlistId: string;
+  playlistName?: string;
   format: string;
   progress: number; // 0 to 100
   status: 'fetching' | 'converting' | 'encoding' | 'ready' | 'error';
@@ -37,8 +39,8 @@ export interface DownloadContextType {
   activeCount: number;
   queueCount: number;
   concurrencyLimit: number;
-  enqueueDownload: (track: MusicTrack, playlistId?: string, format?: string) => void;
-  enqueueBatchDownloads: (tracks: MusicTrack[], playlistId?: string, format?: string) => void;
+  enqueueDownload: (track: MusicTrack, playlistId?: string, format?: string, playlistName?: string) => void;
+  enqueueBatchDownloads: (tracks: MusicTrack[], playlistId?: string, format?: string, playlistName?: string) => void;
   cancelDownload: (trackId: string) => void;
   retryFailedDownloads: () => void;
   clearCompleted: () => void;
@@ -75,10 +77,10 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
   queueRef.current = queue;
 
   // Track cache for automatic and manual retry of failed items
-  const trackCacheRef = useRef<Map<string, { track: MusicTrack; playlistId: string; format: string }>>(new Map());
+  const trackCacheRef = useRef<Map<string, { track: MusicTrack; playlistId: string; playlistName?: string; format: string }>>(new Map());
 
   // Enqueue a single track (uses user's configured format by default)
-  const enqueueDownload = useCallback((track: MusicTrack, playlistId: string = 'library', format?: string) => {
+  const enqueueDownload = useCallback((track: MusicTrack, playlistId: string = 'library', format?: string, playlistName?: string) => {
     // Avoid double queueing
     if (activeDownloadsRef.current[track.id]) return;
     if (queueRef.current.some((q) => q.track.id === track.id)) return;
@@ -96,11 +98,12 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
     });
 
     const targetFormat = format && format !== 'mp3-320' ? format : getEffectiveFormatString();
-    trackCacheRef.current.set(track.id, { track, playlistId, format: targetFormat });
+    trackCacheRef.current.set(track.id, { track, playlistId, playlistName, format: targetFormat });
 
     const item: QueuedDownload = {
       track,
       playlistId,
+      playlistName,
       format: targetFormat,
       enqueuedAt: Date.now(),
     };
@@ -109,14 +112,14 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
   }, [getEffectiveFormatString]);
 
   // Batch "Download All" Enqueue (uses user's configured format)
-  const enqueueBatchDownloads = useCallback((tracks: MusicTrack[], playlistId: string = 'library', format?: string) => {
+  const enqueueBatchDownloads = useCallback((tracks: MusicTrack[], playlistId: string = 'library', format?: string, playlistName?: string) => {
     const existingActiveIds = new Set(Object.keys(activeDownloadsRef.current));
     const existingQueueIds = new Set(queueRef.current.map((q) => q.track.id));
     const targetFormat = format && format !== 'mp3-320' ? format : getEffectiveFormatString();
 
     const newItems: QueuedDownload[] = [];
     tracks.forEach((track) => {
-      trackCacheRef.current.set(track.id, { track, playlistId, format: targetFormat });
+      trackCacheRef.current.set(track.id, { track, playlistId, playlistName, format: targetFormat });
       setFailedDownloads((prev) => {
         if (!prev.has(track.id)) return prev;
         const next = new Set(prev);
@@ -128,6 +131,7 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
         newItems.push({
           track,
           playlistId,
+          playlistName,
           format: targetFormat,
           enqueuedAt: Date.now(),
         });
@@ -201,7 +205,7 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
 
   // Execute a single download worker with automatic retry
   const processDownloadTask = useCallback(async (item: QueuedDownload) => {
-    const { track, playlistId, format } = item;
+    const { track, playlistId, format, playlistName } = item;
     const trackId = track.id;
     const abortController = new AbortController();
 
@@ -288,8 +292,8 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
       // 3. Save file: try writing directly into user-selected directory first (File System Access API)
       const sanitize = (s: string) => s.replace(/[/\\?%*:|"<>]/g, '_');
       const filename = `${sanitize(track.artist || 'Unknown')} - ${sanitize(track.title || 'Track')}.${result.ext || 'mp3'}`;
-      
-      const savedToFolder = await writeBlobToLocalFolder(filename, result.blob);
+      const subfolder = playlistName || (playlistId && playlistId !== 'library' ? playlistId : undefined);
+      const savedToFolder = await writeBlobToLocalFolder(filename, result.blob, subfolder);
       if (!savedToFolder) {
         // Fallback to native browser download manager
         triggerFileDownload(result.blob, filename);

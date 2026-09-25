@@ -850,6 +850,84 @@ app.post('/api/enrich-metadata', async (req, res) => {
   }
 });
 
+// 🤖 AI Smart Metadata Fixer (Google Gemini + Regex fallback)
+app.post('/api/ai/fix-metadata', async (req, res) => {
+  try {
+    const { title, artist } = req.body;
+    let cleanTitle = String(title || '').trim();
+    let cleanArtist = String(artist || '').trim();
+
+    // 1. Remove spam tags and website watermarks via regex first
+    const spamPatterns = [
+      /\[www\.[^\]]+\]/gi,
+      /\(www\.[^)]+\)/gi,
+      /\[free\s*dl[^\]]*\]/gi,
+      /\(free\s*dl[^)]*\)/gi,
+      /\[free\s*download[^\]]*\]/gi,
+      /\(free\s*download[^)]*\)/gi,
+      /\[official\s*audio\]/gi,
+      /\(official\s*audio\)/gi,
+      /\[official\s*video\]/gi,
+      /\(official\s*video\)/gi,
+      /\[official\s*music\s*video\]/gi,
+      /\(official\s*music\s*video\)/gi,
+      /\[lyric\s*video\]/gi,
+      /\(lyric\s*video\)/gi,
+      /\[320\s*kbps\]/gi,
+      /\(320\s*kbps\)/gi,
+      /\[hq\]/gi,
+      /\(hq\)/gi,
+      /\[hd\]/gi,
+      /\(hd\)/gi,
+    ];
+
+    spamPatterns.forEach((pattern) => {
+      cleanTitle = cleanTitle.replace(pattern, '').trim();
+      cleanArtist = cleanArtist.replace(pattern, '').trim();
+    });
+
+    // 2. If Gemini is available, refine further
+    const ai = getGeminiClient();
+    if (ai) {
+      try {
+        const promptText = `Clean and normalize this music track. Remove remaining promotional watermarks.
+Input Title: "${cleanTitle}"
+Input Artist: "${cleanArtist}"
+
+Return a JSON object:
+{
+  "title": "Clean Title",
+  "artist": "Clean Artist",
+  "remixer": "Remixer if any"
+}
+Return ONLY valid JSON.`;
+
+        const geminiRes = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: promptText,
+          config: { responseMimeType: 'application/json' },
+        });
+
+        if (geminiRes.text) {
+          const parsed = JSON.parse(geminiRes.text.trim());
+          if (parsed.title) cleanTitle = parsed.title;
+          if (parsed.artist) cleanArtist = parsed.artist;
+        }
+      } catch (aiErr) {
+        console.warn('Gemini metadata fix note:', aiErr);
+      }
+    }
+
+    res.json({
+      success: true,
+      title: cleanTitle,
+      artist: cleanArtist,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fix metadata', details: err.message });
+  }
+});
+
 function parseJsonFromResponse(text: string) {
   let clean = text.trim();
   if (clean.startsWith('```')) {

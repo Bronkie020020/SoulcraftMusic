@@ -721,8 +721,8 @@ export default function App() {
       });
     });
 
-    // 3. Push batch to global download manager (respects concurrency limit 1-5)
-    enqueueBatchDownloads(filteredSearchTracks, playlistId);
+    // 3. Push batch to global download manager (respects concurrency limit 1-5, saves into playlist subfolder)
+    enqueueBatchDownloads(filteredSearchTracks, playlistId, undefined, playlistName);
   };
 
   // Save updated ID3 tags

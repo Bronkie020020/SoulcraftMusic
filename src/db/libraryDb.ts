@@ -16,7 +16,7 @@ export interface StoredTrack {
   playlistId: string;
   title: string;
   artist: string;
-  audioBlob: Blob;
+  audioBlob?: Blob;
   duration: number; // in seconds
   savedAt: number;  // timestamp in ms
   album?: string;
@@ -168,6 +168,20 @@ export async function getAllTracksFromDb(): Promise<StoredTrack[]> {
     const store = tx.objectStore('tracks');
     const req = store.getAll();
     req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+/**
+ * Retrieve a single track by its ID from IndexedDB
+ */
+export async function getTrackFromDb(trackId: string): Promise<StoredTrack | null> {
+  const db = await openLibraryDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('tracks', 'readonly');
+    const store = tx.objectStore('tracks');
+    const req = store.get(trackId);
+    req.onsuccess = () => resolve(req.result || null);
     req.onerror = () => reject(req.error);
   });
 }

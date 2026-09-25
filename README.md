@@ -20,6 +20,16 @@
 - **Parallelle Downloads**: Configureerbaar aantal gelijktijdige downloads (standaard 3 parallel).
 - **Live Voortgang**: Directe weergave van actieve downloads, percentages, wachtrij-aantallen en bestemmingslocatie.
 
+### 📁 Mappenstructuur per Afspeellijst
+- **Automatische Submappen**: Bij het downloaden van een afspeellijst maakt Soulcraft automatisch een eigen submap aan in de geselecteerde downloadmap (bijv. `Soulcraft Downloader / <Naam Afspeellijst> /`). Geen platte bestandenlijsten meer!
+- **File System Access API Integratie**: Mappen worden direct op schijf aangemaakt en gesynchroniseerd zonder extra pop-ups.
+
+### 🎛️ DJ Studio Toolkit & Metadata Suite
+- ⚡ **Auto Hot Cues & Memory Points Generator**: Berekent automatisch Cue-punten op muzikale frasen (`Intro`, `Drop 1`, `Breakdown`, `Drop 2`, `Outro`, `Vocal`) met visuele, interactieve kleurencodes.
+- 🤖 **AI Smart Metadata Fixer (Google Gemini)**: Verwijdert storende websitenamen (zoals `[www.remix.com]` of `[FREE DL]`), corrigeert artiesten en titels, en formatteert tags. Bevat een lokale regex-fallback als er geen API-sleutel is ingesteld.
+- 🛠️ **Broken Files & Corrupt Header Scanner**: Detecteert ontbrekende audiobestanden in IndexedDB, helpt bij het relinken en valideert audio-headers op corruptie.
+- 🎨 **DJ Tags & Visuals**: Direct inzicht in Camelot-toonsoorten (bijv. `8A`, `11B`), gemeten BPM, dominante stemming (Mood) en genre, inclusief 2x2 collage-covers.
+
 ### 💾 Eigen Opslagmap & File System Access API
 - **Kies je Eigen Map**: Kies via de moderne browser **File System Access API** (`showDirectoryPicker()`) een vaste map op je computer (bijv. je externe schijf of `Muziek`-map). Nummers worden direct weggeschreven zonder vervelende "Opslaan als..." pop-ups.
 - **Automatische Fallback**: Ondersteunt automatische fallback naar reguliere browserdownloads als de browser de API niet ondersteunt.

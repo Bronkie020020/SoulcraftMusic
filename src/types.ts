@@ -33,6 +33,9 @@ export interface MusicTrack {
   lyrics?: string;
   bpm?: number;
   key?: string;
+  camelotKey?: string;
+  mood?: string;
+  hotCues?: any[];
   playlistId?: string;
   isDownloaded?: boolean;
   isFavorite?: boolean;
