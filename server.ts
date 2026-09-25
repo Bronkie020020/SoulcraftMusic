@@ -1304,8 +1304,20 @@ app.get('/api/download', async (req, res) => {
     const targetQuery = [trackArtist, trackTitle].filter(Boolean).join(' ').trim() || (typeof url === 'string' ? url : 'music track');
     const expectedDurSec = typeof duration === 'string' && parseInt(duration, 10) > 0 ? parseInt(duration, 10) : undefined;
 
-    // Determine target format
-    const requestedFormat = (typeof format === 'string' ? format : 'mp3-320');
+    // Determine target format & bitrate from settings
+    const requestedFormat = (typeof format === 'string' ? format : 'mp3-192');
+    const { bitrate } = req.query;
+    let targetBitrate = '192k';
+    if (typeof bitrate === 'string' && (bitrate === '128' || bitrate === '192' || bitrate === '320')) {
+      targetBitrate = `${bitrate}k`;
+    } else if (requestedFormat.includes('-')) {
+      const parts = requestedFormat.split('-');
+      const num = parts[1];
+      if (num === '128' || num === '192' || num === '320') {
+        targetBitrate = `${num}k`;
+      }
+    }
+
     let ext = 'mp3';
     let mimeType = 'audio/mpeg';
 
@@ -1476,9 +1488,9 @@ app.get('/api/download', async (req, res) => {
 
     if (ext === 'mp3') {
       if (hasCoverImage) {
-        ffmpegCmd = `${ffmpegBin} -y -threads 0 -i "${tmpInput}" -i "${tmpCover}" -map 0:a -map 1:v -c:a libmp3lame -b:a 320k -q:a 0 -c:v copy -id3v2_version 3 -metadata:s:v title="Album cover" -metadata:s:v comment="Cover (front)" ${metadataArgs} -ar 44100 -ac 2 "${tmpOutput}"`;
+        ffmpegCmd = `${ffmpegBin} -y -threads 0 -i "${tmpInput}" -i "${tmpCover}" -map 0:a -map 1:v -c:a libmp3lame -b:a ${targetBitrate} -q:a 0 -c:v copy -id3v2_version 3 -metadata:s:v title="Album cover" -metadata:s:v comment="Cover (front)" ${metadataArgs} -ar 44100 -ac 2 "${tmpOutput}"`;
       } else {
-        ffmpegCmd = `${ffmpegBin} -y -threads 0 -i "${tmpInput}" ${metadataArgs} -ar 44100 -ac 2 -c:a libmp3lame -b:a 320k -q:a 0 "${tmpOutput}"`;
+        ffmpegCmd = `${ffmpegBin} -y -threads 0 -i "${tmpInput}" ${metadataArgs} -ar 44100 -ac 2 -c:a libmp3lame -b:a ${targetBitrate} -q:a 0 "${tmpOutput}"`;
       }
     } else if (ext === 'wav') {
       ffmpegCmd = `${ffmpegBin} -y -threads 0 -i "${tmpInput}" ${metadataArgs} -ar 44100 -ac 2 -sample_fmt s16 "${tmpOutput}"`;
@@ -1489,10 +1501,11 @@ app.get('/api/download', async (req, res) => {
         ffmpegCmd = `${ffmpegBin} -y -threads 0 -i "${tmpInput}" ${metadataArgs} -ar 44100 -ac 2 -c:a flac -compression_level 2 "${tmpOutput}"`;
       }
     } else if (ext === 'm4a') {
+      const m4aBitrate = targetBitrate === '320k' ? '256k' : targetBitrate;
       if (hasCoverImage) {
-        ffmpegCmd = `${ffmpegBin} -y -threads 0 -i "${tmpInput}" -i "${tmpCover}" -map 0:a -map 1:v -c:a aac -b:a 256k -c:v copy -disposition:v:0 attached_pic ${metadataArgs} -ar 44100 -ac 2 "${tmpOutput}"`;
+        ffmpegCmd = `${ffmpegBin} -y -threads 0 -i "${tmpInput}" -i "${tmpCover}" -map 0:a -map 1:v -c:a aac -b:a ${m4aBitrate} -c:v copy -disposition:v:0 attached_pic ${metadataArgs} -ar 44100 -ac 2 "${tmpOutput}"`;
       } else {
-        ffmpegCmd = `${ffmpegBin} -y -threads 0 -i "${tmpInput}" ${metadataArgs} -ar 44100 -ac 2 -c:a aac -b:a 256k "${tmpOutput}"`;
+        ffmpegCmd = `${ffmpegBin} -y -threads 0 -i "${tmpInput}" ${metadataArgs} -ar 44100 -ac 2 -c:a aac -b:a ${m4aBitrate} "${tmpOutput}"`;
       }
     }
 
@@ -1501,10 +1514,10 @@ app.get('/api/download', async (req, res) => {
     } catch (ffmpegErr) {
       console.warn('FFmpeg transcode warning, retrying basic transcode without cover:', ffmpegErr);
       try {
-        let fallbackCodecArgs = '-c:a libmp3lame -b:a 320k -q:a 0';
+        let fallbackCodecArgs = `-c:a libmp3lame -b:a ${targetBitrate} -q:a 0`;
         if (ext === 'flac') fallbackCodecArgs = '-c:a flac -compression_level 2';
         else if (ext === 'wav') fallbackCodecArgs = '-sample_fmt s16';
-        else if (ext === 'm4a') fallbackCodecArgs = '-c:a aac -b:a 256k';
+        else if (ext === 'm4a') fallbackCodecArgs = `-c:a aac -b:a ${targetBitrate === '320k' ? '256k' : targetBitrate}`;
         const fallbackCmd = `${ffmpegBin} -y -threads 0 -i "${tmpInput}" ${metadataArgs} -ar 44100 -ac 2 ${fallbackCodecArgs} "${tmpOutput}"`;
         await execAsync(fallbackCmd);
       } catch (fbErr) {

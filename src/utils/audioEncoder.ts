@@ -407,7 +407,9 @@ export async function renderTrackToAudioBlob(
     }
 
     try {
-      const downloadUrl = `/api/download?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}&format=${encodeURIComponent(format)}&album=${encodeURIComponent(track.album || '')}&year=${encodeURIComponent(track.releaseYear || '')}&genre=${encodeURIComponent(track.genre || '')}&coverUrl=${encodeURIComponent(track.coverUrl || '')}&duration=${encodeURIComponent(String(expectedDurationSec))}&bpm=${encodeURIComponent(String(track.bpm || ''))}&key=${encodeURIComponent(track.key || '')}`;
+      const bitrateMatch = format.match(/-(128|192|320)/);
+      const bitrateParam = bitrateMatch ? `&bitrate=${bitrateMatch[1]}` : '';
+      const downloadUrl = `/api/download?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}&format=${encodeURIComponent(format)}${bitrateParam}&album=${encodeURIComponent(track.album || '')}&year=${encodeURIComponent(track.releaseYear || '')}&genre=${encodeURIComponent(track.genre || '')}&coverUrl=${encodeURIComponent(track.coverUrl || '')}&duration=${encodeURIComponent(String(expectedDurationSec))}&bpm=${encodeURIComponent(String(track.bpm || ''))}&key=${encodeURIComponent(track.key || '')}`;
       console.info(`[AudioStream Engine] [Attempt ${attempt + 1}/${maxRetries + 1}] Initiating fetch request to backend: ${downloadUrl}`);
       
       const fetchStartTime = performance.now();

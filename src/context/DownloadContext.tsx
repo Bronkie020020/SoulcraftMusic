@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { MusicTrack } from '../types';
 import { renderTrackToAudioBlob, triggerFileDownload, DownloadProgressInfo } from '../utils/audioEncoder';
 import { saveTrackToDb, StoredTrack } from '../db/libraryDb';
-import { ArrowDown, CheckCircle2, AlertCircle, Loader2, X, DownloadCloud, Sparkles, Zap } from 'lucide-react';
+import { ArrowDown, CheckCircle2, AlertCircle, Loader2, X, DownloadCloud, Sparkles, Zap, FolderCheck } from 'lucide-react';
+import { useSettings } from './SettingsContext';
 
 export interface QueuedDownload {
   track: MusicTrack;
@@ -35,6 +36,7 @@ export interface DownloadContextType {
   isDownloading: boolean;
   activeCount: number;
   queueCount: number;
+  concurrencyLimit: number;
   enqueueDownload: (track: MusicTrack, playlistId?: string, format?: string) => void;
   enqueueBatchDownloads: (tracks: MusicTrack[], playlistId?: string, format?: string) => void;
   cancelDownload: (trackId: string) => void;
@@ -51,14 +53,13 @@ export interface DownloadContextType {
 
 const DownloadContext = createContext<DownloadContextType | null>(null);
 
-const MAX_CONCURRENT_DOWNLOADS = 3;
-
 interface DownloadProviderProps {
   children: ReactNode;
   onTrackSavedToLibrary?: (track: MusicTrack) => void;
 }
 
 export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, onTrackSavedToLibrary }) => {
+  const { settings, getEffectiveFormatString, writeBlobToLocalFolder } = useSettings();
   const [queue, setQueue] = useState<QueuedDownload[]>([]);
   const [activeDownloads, setActiveDownloads] = useState<Record<string, ActiveDownloadProgress>>({});
   const [completedDownloads, setCompletedDownloads] = useState<Set<string>>(new Set());
@@ -72,8 +73,8 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
   const queueRef = useRef<QueuedDownload[]>([]);
   queueRef.current = queue;
 
-  // Enqueue a single track
-  const enqueueDownload = useCallback((track: MusicTrack, playlistId: string = 'library', format: string = 'mp3-320') => {
+  // Enqueue a single track (uses user's configured format by default)
+  const enqueueDownload = useCallback((track: MusicTrack, playlistId: string = 'library', format?: string) => {
     // Avoid double queueing
     if (activeDownloadsRef.current[track.id]) return;
     if (queueRef.current.some((q) => q.track.id === track.id)) return;
@@ -90,20 +91,23 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
       return next;
     });
 
+    const targetFormat = format && format !== 'mp3-320' ? format : getEffectiveFormatString();
+
     const item: QueuedDownload = {
       track,
       playlistId,
-      format,
+      format: targetFormat,
       enqueuedAt: Date.now(),
     };
 
     setQueue((prev) => [...prev, item]);
-  }, []);
+  }, [getEffectiveFormatString]);
 
-  // Batch "Download All" Enqueue
-  const enqueueBatchDownloads = useCallback((tracks: MusicTrack[], playlistId: string = 'library', format: string = 'mp3-320') => {
+  // Batch "Download All" Enqueue (uses user's configured format)
+  const enqueueBatchDownloads = useCallback((tracks: MusicTrack[], playlistId: string = 'library', format?: string) => {
     const existingActiveIds = new Set(Object.keys(activeDownloadsRef.current));
     const existingQueueIds = new Set(queueRef.current.map((q) => q.track.id));
+    const targetFormat = format && format !== 'mp3-320' ? format : getEffectiveFormatString();
 
     const newItems: QueuedDownload[] = [];
     tracks.forEach((track) => {
@@ -111,7 +115,7 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
         newItems.push({
           track,
           playlistId,
-          format,
+          format: targetFormat,
           enqueuedAt: Date.now(),
         });
       }
@@ -120,7 +124,7 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
     if (newItems.length > 0) {
       setQueue((prev) => [...prev, ...newItems]);
     }
-  }, []);
+  }, [getEffectiveFormatString]);
 
   // Cancel an active or queued download
   const cancelDownload = useCallback((trackId: string) => {
@@ -231,10 +235,15 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
 
       await saveTrackToDb(storedTrack);
 
-      // 3. Trigger native file download in browser
+      // 3. Save file: try writing directly into user-selected directory first (File System Access API)
       const sanitize = (s: string) => s.replace(/[/\\?%*:|"<>]/g, '_');
       const filename = `${sanitize(track.artist || 'Unknown')} - ${sanitize(track.title || 'Track')}.${result.ext || 'mp3'}`;
-      triggerFileDownload(result.blob, filename);
+      
+      const savedToFolder = await writeBlobToLocalFolder(filename, result.blob);
+      if (!savedToFolder) {
+        // Fallback to native browser download manager
+        triggerFileDownload(result.blob, filename);
+      }
 
       // 4. Update status sets
       setCompletedDownloads((prev) => new Set(prev).add(trackId));
@@ -262,12 +271,13 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
         return next;
       });
     }
-  }, [onTrackSavedToLibrary]);
+  }, [onTrackSavedToLibrary, writeBlobToLocalFolder]);
 
-  // Concurrency Engine: picks up to MAX_CONCURRENT_DOWNLOADS items from queue
+  // Concurrency Engine: dynamically limits to user's settings.concurrency (1 to 5)
   useEffect(() => {
     const currentActiveCount = Object.keys(activeDownloads).length;
-    const availableSlots = MAX_CONCURRENT_DOWNLOADS - currentActiveCount;
+    const maxConcurrency = settings.concurrency || 3;
+    const availableSlots = maxConcurrency - currentActiveCount;
 
     if (availableSlots > 0 && queue.length > 0) {
       // Dequeue next available items
@@ -281,7 +291,7 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
         processDownloadTask(item);
       });
     }
-  }, [queue, activeDownloads, processDownloadTask]);
+  }, [queue, activeDownloads, settings.concurrency, processDownloadTask]);
 
   const activeCount = Object.keys(activeDownloads).length;
   const queueCount = queue.length;
@@ -297,6 +307,7 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
         isDownloading,
         activeCount,
         queueCount,
+        concurrencyLimit: settings.concurrency,
         enqueueDownload,
         enqueueBatchDownloads,
         cancelDownload,
@@ -326,11 +337,12 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
                   <h4 className="text-xs sm:text-sm font-extrabold flex items-center gap-1.5 text-yellow-400">
                     <span>Achtergrond Download Manager</span>
                     <span className="px-1.5 py-0.5 rounded-full bg-yellow-400/20 text-yellow-400 text-[10px] font-mono">
-                      {activeCount}/3 parallel
+                      {activeCount}/{settings.concurrency} parallel
                     </span>
                   </h4>
                   <p className="text-[11px] text-zinc-400 font-medium">
-                    {queueCount > 0 ? `${queueCount} in wachtrij • ` : ''}Opgeslagen in IndexedDB
+                    {queueCount > 0 ? `${queueCount} in wachtrij • ` : ''}
+                    {settings.customDirectoryName ? `Map: ${settings.customDirectoryName}` : 'IndexedDB & Downloads'}
                   </p>
                 </div>
               </div>

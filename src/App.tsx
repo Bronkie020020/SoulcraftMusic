@@ -17,6 +17,7 @@ import { AddToPlaylistModal } from './components/AddToPlaylistModal';
 import { SmartPlaylistModal } from './components/SmartPlaylistModal';
 import { AudioAnalysisModal } from './components/AudioAnalysisModal';
 import { StartupSplashScreen } from './components/StartupSplashScreen';
+import { SettingsPanel } from './components/SettingsPanel';
 import { AppLanguage, AppTheme, MusicTrack, Platform, DownloadMetrics, Playlist } from './types';
 import { Play, Download, ListMusic, ShieldCheck, CheckCircle2, WifiOff, Library, HardDrive, AlertTriangle, Sparkles } from 'lucide-react';
 import { renderTrackToAudioBlob, triggerFileDownload } from './utils/audioEncoder';
@@ -114,6 +115,7 @@ export default function App() {
   const [showQRCodeModal, setShowQRCodeModal] = useState<boolean>(false);
   const [showStorageModal, setShowStorageModal] = useState<boolean>(false);
   const [showWindowsInstallModal, setShowWindowsInstallModal] = useState<boolean>(false);
+  const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [hasPromptedStorageAlert, setHasPromptedStorageAlert] = useState<boolean>(false);
   const [storageLimitMb, setStorageLimitMb] = useState<number>(() => {
@@ -654,6 +656,7 @@ export default function App() {
         onOpenQRCode={() => setShowQRCodeModal(true)}
         onOpenStorageManagement={() => setShowStorageModal(true)}
         onOpenWindowsInstall={() => setShowWindowsInstallModal(true)}
+        onOpenSettings={() => setShowSettingsModal(true)}
         theme={theme}
         onToggleTheme={handleToggleTheme}
       />
@@ -985,6 +988,13 @@ export default function App() {
           onClose={() => setShowWindowsInstallModal(false)}
         />
       )}
+
+      {/* Advanced Download & Audio Settings Configuration Panel */}
+      <SettingsPanel
+        isOpen={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+        language={language}
+      />
 
       {/* Startup Splash Screen */}
       {showSplashScreen && (

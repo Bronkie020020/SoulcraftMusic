@@ -1,5 +1,5 @@
 import React from 'react';
-import { Disc3, Download, Languages, Library, HardDriveDownload, Sparkles, Wifi, WifiOff, QrCode, Laptop, Sun, Moon } from 'lucide-react';
+import { Disc3, Download, Languages, Library, HardDriveDownload, Sparkles, Wifi, WifiOff, QrCode, Laptop, Sun, Moon, Settings } from 'lucide-react';
 import { AppLanguage, AppTheme } from '../types';
 import { translations } from '../utils/translations';
 
@@ -16,6 +16,7 @@ interface HeaderProps {
   onOpenQRCode?: () => void;
   onOpenStorageManagement?: () => void;
   onOpenWindowsInstall?: () => void;
+  onOpenSettings?: () => void;
   theme?: AppTheme;
   onToggleTheme?: () => void;
 }
@@ -33,6 +34,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenQRCode,
   onOpenStorageManagement,
   onOpenWindowsInstall,
+  onOpenSettings,
   theme = 'light-blue',
   onToggleTheme,
 }) => {
@@ -84,6 +86,15 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Quick action buttons on mobile */}
           <div className="flex items-center gap-1.5 sm:hidden">
+            {onOpenSettings && (
+              <button
+                onClick={onOpenSettings}
+                className="p-2 rounded-xl bg-white hover:bg-purple-50 border border-purple-200 text-purple-900 text-xs font-bold transition-colors shadow-sm active:scale-95 min-h-[38px] min-w-[38px] flex items-center justify-center cursor-pointer"
+                title={language === 'nl' ? 'Instellingen' : 'Settings'}
+              >
+                <Settings className="w-4 h-4 text-purple-700" />
+              </button>
+            )}
             {onOpenQRCode && (
               <button
                 onClick={onOpenQRCode}
@@ -189,6 +200,18 @@ export const Header: React.FC<HeaderProps> = ({
               <Laptop className="w-3.5 h-3.5 text-white" />
               <span className="hidden md:inline">{t.installDesktopBtn}</span>
               <span className="md:hidden">App Info</span>
+            </button>
+          )}
+
+          {/* Settings Configuration Panel Button */}
+          {onOpenSettings && (
+            <button
+              onClick={onOpenSettings}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-purple-50 border border-purple-200 text-purple-900 text-xs font-bold transition-colors shadow-sm cursor-pointer"
+              title={language === 'nl' ? 'Instellingen (Opslagmap, Formaat, Kwaliteit, Concurrency)' : 'Settings'}
+            >
+              <Settings className="w-3.5 h-3.5 text-purple-700" />
+              <span className="hidden lg:inline">{language === 'nl' ? 'Instellingen' : 'Settings'}</span>
             </button>
           )}
 
