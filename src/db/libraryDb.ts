@@ -248,6 +248,7 @@ export function convertStoredTrackToMusicTrack(stored: StoredTrack): MusicTrack 
     format: stored.format || 'mp3',
     fileSizeMb: stored.fileSizeMb || Number((stored.audioBlob.size / (1024 * 1024)).toFixed(2)),
     isDownloaded: true,
+    playlistId: stored.playlistId,
     downloadedAt: new Date(stored.savedAt).toISOString(),
     bpm: stored.bpm,
     key: stored.key,

@@ -19,7 +19,7 @@ import { AudioAnalysisModal } from './components/AudioAnalysisModal';
 import { StartupSplashScreen } from './components/StartupSplashScreen';
 import { SettingsPanel } from './components/SettingsPanel';
 import { AppLanguage, AppTheme, MusicTrack, Platform, DownloadMetrics, Playlist } from './types';
-import { Play, Download, ListMusic, ShieldCheck, CheckCircle2, WifiOff, Library, HardDrive, AlertTriangle, Sparkles } from 'lucide-react';
+import { Play, Download, ListMusic, ShieldCheck, CheckCircle2, WifiOff, Library, HardDrive, AlertTriangle, Sparkles, Loader2, Check } from 'lucide-react';
 import { renderTrackToAudioBlob, triggerFileDownload } from './utils/audioEncoder';
 import { SAMPLE_LIBRARY_TRACKS, SAMPLE_PLAYLISTS } from './utils/sampleLibraryData';
 import { safeJsonStringify } from './utils/jsonUtils';
@@ -33,7 +33,14 @@ import {
 } from './db/libraryDb';
 
 export default function App() {
-  const { enqueueDownload, activeDownloads, getTrackStatus } = useDownload();
+  const {
+    enqueueDownload,
+    enqueueBatchDownloads,
+    activeDownloads,
+    completedDownloads,
+    queue,
+    getTrackStatus,
+  } = useDownload();
   const [showSplashScreen, setShowSplashScreen] = useState<boolean>(true);
   const [theme, setTheme] = useState<AppTheme>(() => {
     try {
@@ -320,6 +327,53 @@ export default function App() {
     }).catch((err) => console.warn('IndexedDB playlists load note:', err));
   }, []);
 
+  // Refresh library and playlists whenever completed downloads update in background
+  useEffect(() => {
+    if (completedDownloads.size > 0) {
+      getAllTracksFromDb().then((stored) => {
+        if (stored && stored.length > 0) {
+          const converted = stored.map(convertStoredTrackToMusicTrack);
+          setLibraryTracks((prev) => {
+            const map = new Map<string, MusicTrack>();
+            prev.forEach((t) => map.set(t.id, t));
+            converted.forEach((t) => map.set(t.id, t));
+            return Array.from(map.values());
+          });
+        }
+      }).catch((err) => console.warn('IndexedDB tracks reload note:', err));
+
+      getAllPlaylistsFromDb().then((stored) => {
+        if (stored && stored.length > 0) {
+          setPlaylists((prev) => {
+            const map = new Map<string, Playlist>();
+            prev.forEach((p) => map.set(p.id, p));
+            stored.forEach((s) => {
+              const existing = map.get(s.id);
+              if (existing) {
+                map.set(s.id, {
+                  ...existing,
+                  name: s.name,
+                  coverUrl: s.coverUrl || existing.coverUrl,
+                });
+              } else {
+                map.set(s.id, {
+                  id: s.id,
+                  name: s.name,
+                  coverUrl: s.coverUrl,
+                  trackIds: [],
+                  createdAt: new Date(s.createdAt).toISOString(),
+                  description: s.description,
+                  color: s.color,
+                });
+              }
+            });
+            return Array.from(map.values());
+          });
+        }
+      }).catch((err) => console.warn('IndexedDB playlists reload note:', err));
+    }
+  }, [completedDownloads]);
+
   // Sync playlists to state & localStorage
   const updatePlaylists = (newPlaylists: Playlist[]) => {
     setPlaylists(newPlaylists);
@@ -328,7 +382,7 @@ export default function App() {
     } catch (e) {}
   };
 
-  // Create or add playlist
+  // Create or add playlist with IndexedDB persistence
   const handleSavePlaylist = (playlist: Playlist) => {
     const exists = playlists.some((p) => p.id === playlist.id);
     let updated: Playlist[];
@@ -338,6 +392,14 @@ export default function App() {
       updated = [playlist, ...playlists];
     }
     updatePlaylists(updated);
+    savePlaylistToDb({
+      id: playlist.id,
+      name: playlist.name,
+      coverUrl: playlist.coverUrl,
+      createdAt: playlist.createdAt ? new Date(playlist.createdAt).getTime() : Date.now(),
+      description: playlist.description,
+      color: playlist.color,
+    }).catch((err) => console.warn('IndexedDB playlist save note:', err));
   };
 
   const handleCreateNewPlaylist = (name: string, description?: string, color?: string): Playlist => {
@@ -349,7 +411,7 @@ export default function App() {
       trackIds: [],
       createdAt: new Date().toISOString(),
     };
-    updatePlaylists([newPl, ...playlists]);
+    handleSavePlaylist(newPl);
     return newPl;
   };
 
@@ -370,6 +432,7 @@ export default function App() {
   const handleDeletePlaylist = (playlistId: string) => {
     const updated = playlists.filter((p) => p.id !== playlistId);
     updatePlaylists(updated);
+    deletePlaylistFromDb(playlistId).catch((err) => console.warn('IndexedDB playlist delete note:', err));
   };
 
   const handleRemoveTrackFromPlaylist = (playlistId: string, trackId: string) => {
@@ -574,7 +637,92 @@ export default function App() {
 
   // Single track download action (delegates to global DownloadProvider with IndexedDB persistence)
   const handleDownloadTrack = async (track: MusicTrack, format: string = 'mp3-320') => {
-    enqueueDownload(track, 'library', format);
+    let targetPlaylistId = track.playlistId || 'library';
+    if (playlistInfo?.isPlaylist && playlistInfo.title) {
+      const existingPl = playlists.find(
+        (p) => p.name.toLowerCase() === (playlistInfo.title || '').toLowerCase()
+      );
+      if (existingPl) {
+        targetPlaylistId = existingPl.id;
+      } else {
+        const newPl = handleCreateNewPlaylist(playlistInfo.title, `Gedownload via Spotify (${playlistInfo.title})`);
+        targetPlaylistId = newPl.id;
+      }
+    }
+    enqueueDownload(track, targetPlaylistId, format);
+  };
+
+  // Filtered tracks list based on platform
+  const filteredSearchTracks = tracks.filter((t) => {
+    if (selectedPlatformFilter === 'all') return true;
+    return t.platform === selectedPlatformFilter;
+  });
+
+  // Batch download progress & metrics for active search results
+  const batchDownloadStats = React.useMemo(() => {
+    const total = filteredSearchTracks.length;
+    if (total === 0) return { total: 0, completed: 0, activeOrQueued: 0, isDownloading: false, allCompleted: false };
+
+    let completed = 0;
+    let activeOrQueued = 0;
+
+    for (const t of filteredSearchTracks) {
+      const metric = combinedDownloadState[t.id];
+      if (completedDownloads.has(t.id) || t.isDownloaded || metric?.status === 'ready' || metric?.progress === 100) {
+        completed++;
+      } else if (activeDownloads[t.id] || queue.some((q) => q.track.id === t.id)) {
+        activeOrQueued++;
+      }
+    }
+
+    const isDownloading = activeOrQueued > 0;
+    const allCompleted = total > 0 && completed === total;
+
+    return { total, completed, activeOrQueued, isDownloading, allCompleted };
+  }, [filteredSearchTracks, completedDownloads, combinedDownloadState, activeDownloads, queue]);
+
+  // Batch "Download Alles" handler for current search / playlist view
+  const handleDownloadAllSearchResults = async () => {
+    if (filteredSearchTracks.length === 0) return;
+
+    // 1. Ensure playlist entity exists so "Afspeellijsten" counter & directory are created
+    const isPlaylist = playlistInfo?.isPlaylist;
+    const playlistName = playlistInfo?.title || (isPlaylist ? 'Gedownloade Afspeellijst' : 'Zoekresultaten Batch');
+
+    // Check if playlist already exists or create new
+    const existingPl = playlists.find((p) => p.name.toLowerCase() === playlistName.toLowerCase());
+    const playlistId = existingPl ? existingPl.id : `pl-${Date.now()}`;
+    const trackIds = filteredSearchTracks.map((t) => t.id);
+
+    const targetPlaylist: Playlist = existingPl
+      ? {
+          ...existingPl,
+          trackIds: Array.from(new Set([...existingPl.trackIds, ...trackIds])),
+          coverUrl: existingPl.coverUrl || filteredSearchTracks[0]?.coverUrl || '',
+        }
+      : {
+          id: playlistId,
+          name: playlistName,
+          coverUrl: filteredSearchTracks[0]?.coverUrl || '',
+          trackIds,
+          createdAt: new Date().toISOString(),
+          description: `Gedownload via Spotify / Zoekfunctie (${filteredSearchTracks.length} nummers)`,
+          color: 'yellow',
+        };
+
+    // Update React State & localStorage & IndexedDB
+    handleSavePlaylist(targetPlaylist);
+
+    // 2. Also register tracks to history with playlistId
+    filteredSearchTracks.forEach((t) => {
+      saveToHistory({
+        ...t,
+        playlistId,
+      });
+    });
+
+    // 3. Push batch to global download manager (respects concurrency limit 1-5)
+    enqueueBatchDownloads(filteredSearchTracks, playlistId);
   };
 
   // Save updated ID3 tags
@@ -586,12 +734,6 @@ export default function App() {
     }
     setActiveTagTrack(null);
   };
-
-  // Filtered tracks list based on platform
-  const filteredSearchTracks = tracks.filter((t) => {
-    if (selectedPlatformFilter === 'all') return true;
-    return t.platform === selectedPlatformFilter;
-  });
 
   return (
     <div
@@ -738,20 +880,75 @@ export default function App() {
                     )}
                   </div>
 
-                  {filteredSearchTracks.length > 1 && (
-                    <div className="flex items-center gap-2">
+                  {filteredSearchTracks.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      {/* PRIMARY BATCH DOWNLOAD ALL BUTTON */}
                       <button
-                        onClick={() => handlePlayQueue(filteredSearchTracks)}
-                        className="px-4 py-2 rounded-xl bg-yellow-400 hover:bg-yellow-300 text-black font-bold text-xs flex items-center gap-2 shadow-lg shadow-yellow-400/20 transition-all"
+                        onClick={handleDownloadAllSearchResults}
+                        disabled={batchDownloadStats.isDownloading}
+                        className={`px-5 py-2.5 rounded-xl font-black text-xs md:text-sm flex items-center gap-2 shadow-lg transition-all active:scale-95 cursor-pointer ${
+                          batchDownloadStats.allCompleted
+                            ? 'bg-emerald-400 hover:bg-emerald-300 text-black shadow-emerald-400/20'
+                            : batchDownloadStats.isDownloading
+                            ? 'bg-amber-400 text-black shadow-amber-400/20 animate-pulse'
+                            : 'bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-300 hover:from-amber-300 hover:to-yellow-300 text-black shadow-yellow-400/30'
+                        }`}
+                        title="Download alle nummers van deze afspeellijst gelijktijdig naar je lokale map en IndexedDB"
                       >
-                        <Play className="w-3.5 h-3.5 fill-current" />
-                        <span>Alles Afspelen</span>
+                        {batchDownloadStats.isDownloading ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin text-black" />
+                            <span>
+                              Downloaden... {batchDownloadStats.completed}/{batchDownloadStats.total} voltooid
+                            </span>
+                          </>
+                        ) : batchDownloadStats.allCompleted ? (
+                          <>
+                            <CheckCircle2 className="w-4 h-4 text-black" />
+                            <span>Alles Gedownload ({batchDownloadStats.total})</span>
+                          </>
+                        ) : (
+                          <>
+                            <Download className="w-4 h-4 text-black stroke-[2.5]" />
+                            <span>Download Alles ({filteredSearchTracks.length})</span>
+                          </>
+                        )}
                       </button>
+
+                      {filteredSearchTracks.length > 1 && (
+                        <button
+                          onClick={() => handlePlayQueue(filteredSearchTracks)}
+                          className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-xs flex items-center gap-2 border border-zinc-700 transition-all active:scale-95"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-current" />
+                          <span>Alles Afspelen</span>
+                        </button>
+                      )}
+
                       <button
                         onClick={() => {
-                          filteredSearchTracks.forEach((t) => saveToHistory(t));
+                          const isPl = playlistInfo?.isPlaylist;
+                          const plName = playlistInfo?.title || (isPl ? 'Gedownloade Afspeellijst' : 'Zoekresultaten');
+                          const existingPl = playlists.find((p) => p.name.toLowerCase() === plName.toLowerCase());
+                          const plId = existingPl ? existingPl.id : `pl-${Date.now()}`;
+                          const newPl: Playlist = existingPl
+                            ? {
+                                ...existingPl,
+                                trackIds: Array.from(new Set([...existingPl.trackIds, ...filteredSearchTracks.map((t) => t.id)])),
+                              }
+                            : {
+                                id: plId,
+                                name: plName,
+                                coverUrl: filteredSearchTracks[0]?.coverUrl || '',
+                                trackIds: filteredSearchTracks.map((t) => t.id),
+                                createdAt: new Date().toISOString(),
+                                description: `Opgeslagen vanuit zoekopdracht (${filteredSearchTracks.length} nummers)`,
+                                color: 'yellow',
+                              };
+                          handleSavePlaylist(newPl);
+                          filteredSearchTracks.forEach((t) => saveToHistory({ ...t, playlistId: plId }));
                         }}
-                        className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold text-xs flex items-center gap-2 transition-all border border-zinc-700"
+                        className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold text-xs flex items-center gap-2 transition-all border border-zinc-700 active:scale-95"
                       >
                         <Download className="w-3.5 h-3.5" />
                         <span>Opslaan in Bibliotheek</span>

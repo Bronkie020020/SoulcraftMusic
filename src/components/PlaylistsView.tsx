@@ -75,9 +75,12 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
   // Strict Playlist Separation: only tracks explicitly belonging to this playlistId
   const playlistTracks = useMemo(() => {
     if (!selectedPlaylist) return [];
-    return selectedPlaylist.trackIds
+    const idSet = new Set(selectedPlaylist.trackIds || []);
+    const ordered = (selectedPlaylist.trackIds || [])
       .map((id) => library.find((t) => t.id === id))
       .filter(Boolean) as MusicTrack[];
+    const additional = library.filter((t) => t.playlistId === selectedPlaylist.id && !idSet.has(t.id));
+    return [...ordered, ...additional];
   }, [selectedPlaylist, library]);
 
   // Sync playlist metadata to IndexedDB when created or selected

@@ -33,6 +33,7 @@ export interface MusicTrack {
   lyrics?: string;
   bpm?: number;
   key?: string;
+  playlistId?: string;
   isDownloaded?: boolean;
   isFavorite?: boolean;
   addedAt?: string;
