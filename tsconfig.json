@@ -36,6 +36,7 @@
   "include": [
     "src/**/*",
     "server.ts",
+    "audioDownloader.ts",
     "vite.config.ts"
   ]
 }

@@ -16,6 +16,8 @@ export interface DownloadOptions {
   url: string;
   destinationDir: string;
   filename?: string;
+  playlistName?: string; // Optionele afspeellijst- of albummap
+  createM3u?: boolean;   // Genereert/updatet automatisch een .m3u bestand voor mediaspelers
   maxRetries?: number;
   timeoutMs?: number;
   onProgress?: (progress: DownloadProgress) => void;
@@ -26,17 +28,50 @@ export interface DownloadResult {
   filePath: string;
   fileSizeBytes: number;
   durationMs: number;
+  playlistPath?: string;
+  m3uPath?: string;
 }
 
+/**
+ * Saniteert bestands- en mapnamen specifiek voor Windows.
+ * Voorkomt Path Traversal en Windows Reserved Device Names (CON, PRN, AUX, NUL, COM1-9, LPT1-9).
+ */
 export function sanitizeWindowsFileName(rawName: string): string {
   const base = path.basename(rawName).trim();
+  // Strip ongeldige Windows tekens: < > : " / \ | ? * en control characters
   let clean = base.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_');
+
+  // Controleer op Windows gereserveerde apparaatnamen
   const reservedNames = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$/i;
   if (reservedNames.test(clean)) {
     clean = `audio_${clean}`;
   }
+
+  // Verwijder spaties of punten aan het einde (niet toegestaan in Windows)
   clean = clean.replace(/[. ]+$/, '');
+
   return clean.length > 0 ? clean : `track_${Date.now()}.mp3`;
+}
+
+/**
+ * Voegt een track toe aan een .m3u bestand in de playlist-map
+ * zodat muziekspelers (zoals VLC of Windows Media Player) de lijst direct herkennen.
+ */
+async function appendToM3uPlaylist(playlistFolder: string, playlistName: string, audioFileName: string): Promise<string> {
+  const m3uFile = path.resolve(playlistFolder, `${playlistName}.m3u`);
+  
+  if (!fs.existsSync(m3uFile)) {
+    await fs.promises.writeFile(m3uFile, '#EXTM3U\n', 'utf-8');
+  }
+
+  const existingContent = await fs.promises.readFile(m3uFile, 'utf-8');
+  const lines = existingContent.split(/\r?\n/).map(l => l.trim());
+
+  if (!lines.includes(audioFileName)) {
+    await fs.promises.appendFile(m3uFile, `${audioFileName}\n`, 'utf-8');
+  }
+
+  return m3uFile;
 }
 
 export function formatBytes(bytes: number): string {
@@ -65,6 +100,8 @@ export async function downloadAudioFile(options: DownloadOptions): Promise<Downl
     url,
     destinationDir,
     filename,
+    playlistName,
+    createM3u = true,
     maxRetries = 3,
     timeoutMs = 45000,
     onProgress,
@@ -73,6 +110,7 @@ export async function downloadAudioFile(options: DownloadOptions): Promise<Downl
 
   const startTime = Date.now();
 
+  // Valideer URL
   let parsedUrl: URL;
   try {
     parsedUrl = new URL(url);
@@ -80,14 +118,25 @@ export async function downloadAudioFile(options: DownloadOptions): Promise<Downl
     throw new Error(`[Windows Engine] Ongeldige URL: "${url}"`);
   }
 
+  // Bepaal de effectieve doelmap: hoofdmap of specifieke afspeellijst-submap
+  let targetFolder = destinationDir;
+  let cleanPlaylistName: string | undefined;
+
+  if (playlistName && playlistName.trim().length > 0) {
+    cleanPlaylistName = sanitizeWindowsFileName(playlistName.trim());
+    targetFolder = path.resolve(destinationDir, cleanPlaylistName);
+  }
+
+  // Zorg dat de doelmap veilig en recursief wordt aangemaakt
+  await fs.promises.mkdir(targetFolder, { recursive: true });
+
+  // Bepaal veilige Windows bestandsnaam en doelpad
   const urlBaseName = path.basename(parsedUrl.pathname);
   const defaultName = urlBaseName && urlBaseName.includes('.') ? urlBaseName : `audio_${Date.now()}.mp3`;
   const resolvedFileName = sanitizeWindowsFileName(filename || defaultName);
 
-  await fs.promises.mkdir(destinationDir, { recursive: true });
-
-  const finalPath = path.resolve(destinationDir, resolvedFileName);
-  const partPath = path.resolve(destinationDir, `${resolvedFileName}.part`);
+  const finalPath = path.resolve(targetFolder, resolvedFileName);
+  const partPath = path.resolve(targetFolder, `${resolvedFileName}.part`);
 
   let attempt = 0;
   let lastError: Error | null = null;
@@ -106,7 +155,7 @@ export async function downloadAudioFile(options: DownloadOptions): Promise<Downl
       const response = await fetch(parsedUrl.toString(), {
         signal: controller.signal,
         headers: {
-          'User-Agent': 'SoulcraftMusic-Downloader/1.2 (Windows NT 10.0; Win64; x64)',
+          'User-Agent': 'SoulcraftMusic-Downloader/1.3 (Windows NT 10.0; Win64; x64)',
           'Accept': 'audio/*, application/octet-stream, */*',
         },
       });
@@ -157,21 +206,32 @@ export async function downloadAudioFile(options: DownloadOptions): Promise<Downl
         }
       });
 
+      // Stream direct naar het tijdelijke bestand
       const fileWriteStream = fs.createWriteStream(partPath, { flags: 'w' });
       await pipeline(nodeReadableStream, fileWriteStream);
 
+      // Verwijder eventueel al bestaand doelbestand (voorkomt Windows lock collisions)
       if (fs.existsSync(finalPath)) {
         await fs.promises.unlink(finalPath).catch(() => {});
       }
 
+      // Atomische hernoeming
       await fs.promises.rename(partPath, finalPath);
 
       const stats = await fs.promises.stat(finalPath);
+
+      // Optioneel: voeg toe aan .m3u afspeellijst
+      let m3uPath: string | undefined;
+      if (cleanPlaylistName && createM3u) {
+        m3uPath = await appendToM3uPlaylist(targetFolder, cleanPlaylistName, resolvedFileName);
+      }
 
       return {
         filePath: finalPath,
         fileSizeBytes: stats.size,
         durationMs: Date.now() - startTime,
+        playlistPath: cleanPlaylistName ? targetFolder : undefined,
+        m3uPath,
       };
     } catch (err: any) {
       clearTimeout(timeoutId);
@@ -181,6 +241,7 @@ export async function downloadAudioFile(options: DownloadOptions): Promise<Downl
 
       lastError = err;
 
+      // Schoon .part bestand op bij fout
       if (fs.existsSync(partPath)) {
         await fs.promises.unlink(partPath).catch(() => {});
       }
@@ -197,4 +258,77 @@ export async function downloadAudioFile(options: DownloadOptions): Promise<Downl
   }
 
   throw new Error(`Download mislukt na ${maxRetries} pogingen. Reden: ${lastError?.message || 'Onbekende fout'}`);
+}
+
+export async function runInteractiveCli() {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  const question = (query: string): Promise<string> =>
+    new Promise((resolve) => rl.question(query, resolve));
+
+  console.log('\n=======================================================');
+  console.log('  SoulcraftMusic Downloader - Playlist & Windows Ready  ');
+  console.log('=======================================================\n');
+
+  try {
+    const inputUrl = (await question('Voer audio URL in: ')).trim();
+
+    if (!inputUrl) {
+      console.log('Geen URL ingevoerd. Afgesloten.');
+      rl.close();
+      return;
+    }
+
+    const defaultDir = path.join(process.cwd(), 'downloads');
+    const inputDir = (await question(`Hoofdmap [Standaard: ${defaultDir}]: `)).trim();
+    const targetDir = inputDir || defaultDir;
+
+    const inputPlaylist = (await question('Afspeellijst / Mapnaam (optioneel, Enter voor losse tracks): ')).trim();
+
+    console.log(`\nDownload gestart...`);
+    if (inputPlaylist) {
+      console.log(`Doelmap: ${path.join(targetDir, sanitizeWindowsFileName(inputPlaylist))}`);
+    } else {
+      console.log(`Doelmap: ${targetDir}`);
+    }
+
+    const result = await downloadAudioFile({
+      url: inputUrl,
+      destinationDir: targetDir,
+      playlistName: inputPlaylist || undefined,
+      createM3u: true,
+      onProgress: (p) => {
+        const bar = renderProgressBar(p.percentage, 20);
+        const downloaded = formatBytes(p.bytesDownloaded);
+        const total = p.totalBytes ? formatBytes(p.totalBytes) : 'Onbekend';
+        const speed = formatSpeed(p.speedBytesPerSec);
+        const eta = p.etaSeconds !== null ? `${p.etaSeconds}s` : '--';
+
+        process.stdout.write(`\r${bar} | ${downloaded} / ${total} | ${speed} | ETA: ${eta}  `);
+      },
+    });
+
+    console.log('\n\n Download succesvol voltooid!');
+    console.log(`- Opgeslagen als: ${result.filePath}`);
+    console.log(`- Bestandsgrootte: ${formatBytes(result.fileSizeBytes)}`);
+    console.log(`- Duur: ${(result.durationMs / 1000).toFixed(2)} seconden`);
+    if (result.m3uPath) {
+      console.log(`- Afspeellijst-bestand bijgewerkt: ${result.m3uPath}`);
+    }
+    console.log('');
+  } catch (err: any) {
+    console.error(`\n\n Fout opgetreden: ${err.message}\n`);
+  } finally {
+    rl.close();
+  }
+}
+
+// Start CLI automatisch bij direct uitvoeren
+if (typeof require !== 'undefined' && require.main === module) {
+  runInteractiveCli();
+} else if (process.argv[1] && (process.argv[1].endsWith('audioDownloader.ts') || process.argv[1].endsWith('nodeDownloader.ts'))) {
+  runInteractiveCli();
 }
