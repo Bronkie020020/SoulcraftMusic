@@ -22,8 +22,17 @@ import { Play, Download, ListMusic, ShieldCheck, CheckCircle2, WifiOff, Library,
 import { renderTrackToAudioBlob, triggerFileDownload } from './utils/audioEncoder';
 import { SAMPLE_LIBRARY_TRACKS, SAMPLE_PLAYLISTS } from './utils/sampleLibraryData';
 import { safeJsonStringify } from './utils/jsonUtils';
+import { useDownload } from './context/DownloadContext';
+import {
+  getAllPlaylistsFromDb,
+  getAllTracksFromDb,
+  convertStoredTrackToMusicTrack,
+  savePlaylistToDb,
+  deletePlaylistFromDb,
+} from './db/libraryDb';
 
 export default function App() {
+  const { enqueueDownload, activeDownloads, getTrackStatus } = useDownload();
   const [showSplashScreen, setShowSplashScreen] = useState<boolean>(true);
   const [theme, setTheme] = useState<AppTheme>(() => {
     try {
@@ -227,6 +236,22 @@ export default function App() {
   // Download state map: trackId -> DownloadMetrics
   const [downloadState, setDownloadState] = useState<Record<string, DownloadMetrics>>({});
 
+  // Merge local downloadState with active background downloads from DownloadProvider
+  const combinedDownloadState = React.useMemo<Record<string, DownloadMetrics>>(() => {
+    const map: Record<string, DownloadMetrics> = { ...downloadState };
+    for (const [id, active] of Object.entries(activeDownloads)) {
+      map[id] = {
+        progress: active.progress,
+        status: active.status,
+        speedFormatted: active.speedFormatted,
+        etaFormatted: active.etaFormatted,
+        loadedMb: active.loadedMb,
+        totalMb: active.totalMb,
+      };
+    }
+    return map;
+  }, [downloadState, activeDownloads]);
+
   // Initial load: start clean with saved data or empty state (no auto-mock search)
   useEffect(() => {
     // Load download history from localStorage
@@ -237,7 +262,7 @@ export default function App() {
       }
     } catch (e) {}
 
-    // Load music library from localStorage (starts empty if none saved)
+    // Load music library from localStorage
     try {
       const savedLibrary = localStorage.getItem('soundstreamer_library');
       if (savedLibrary) {
@@ -246,7 +271,20 @@ export default function App() {
       }
     } catch (e) {}
 
-    // Load playlists from localStorage (starts empty if none saved)
+    // Load persisted library & tracks from IndexedDB (preserves audioBlobs)
+    getAllTracksFromDb().then((stored) => {
+      if (stored && stored.length > 0) {
+        const converted = stored.map(convertStoredTrackToMusicTrack);
+        setLibraryTracks((prev) => {
+          const map = new Map<string, MusicTrack>();
+          prev.forEach((t) => map.set(t.id, t));
+          converted.forEach((t) => map.set(t.id, t));
+          return Array.from(map.values());
+        });
+      }
+    }).catch((err) => console.warn('IndexedDB tracks load note:', err));
+
+    // Load playlists from localStorage
     try {
       const savedPlaylists = localStorage.getItem('soundstreamer_playlists');
       if (savedPlaylists) {
@@ -254,6 +292,30 @@ export default function App() {
         setPlaylists(parsed);
       }
     } catch (e) {}
+
+    // Load persisted playlists from IndexedDB
+    getAllPlaylistsFromDb().then((stored) => {
+      if (stored && stored.length > 0) {
+        setPlaylists((prev) => {
+          const map = new Map<string, Playlist>();
+          prev.forEach((p) => map.set(p.id, p));
+          stored.forEach((s) => {
+            if (!map.has(s.id)) {
+              map.set(s.id, {
+                id: s.id,
+                name: s.name,
+                coverUrl: s.coverUrl,
+                trackIds: [],
+                createdAt: new Date(s.createdAt).toISOString(),
+                description: s.description,
+                color: s.color,
+              });
+            }
+          });
+          return Array.from(map.values());
+        });
+      }
+    }).catch((err) => console.warn('IndexedDB playlists load note:', err));
   }, []);
 
   // Sync playlists to state & localStorage
@@ -508,79 +570,9 @@ export default function App() {
     }
   };
 
-  // Single track download action
+  // Single track download action (delegates to global DownloadProvider with IndexedDB persistence)
   const handleDownloadTrack = async (track: MusicTrack, format: string = 'mp3-320') => {
-    const trackId = track.id;
-
-    // Set step 1: fetching
-    setDownloadState((prev) => ({
-      ...prev,
-      [trackId]: {
-        progress: 5,
-        status: 'fetching',
-        speedFormatted: 'Verbinden...',
-        etaFormatted: 'Berekenen...',
-        loadedMb: 0,
-        totalMb: 0,
-      },
-    }));
-
-    try {
-      // Download real audio file from server with real-time speed & ETA streaming
-      const { blob, ext } = await renderTrackToAudioBlob(track, format, (progressInfo) => {
-        setDownloadState((prev) => ({
-          ...prev,
-          [trackId]: {
-            progress: progressInfo.progress,
-            status: progressInfo.progress >= 100 ? 'encoding' : 'converting',
-            speedFormatted: progressInfo.speedFormatted,
-            etaFormatted: progressInfo.etaFormatted,
-            loadedMb: progressInfo.loadedMb,
-            totalMb: progressInfo.totalMb,
-          },
-        }));
-      });
-
-      // Trigger file download in browser
-      const sanitize = (s: string) => s.replace(/[/\\?%*:|"<>]/g, '');
-      const filename = `${sanitize(track.artist)} - ${sanitize(track.title)}.${ext}`;
-
-      triggerFileDownload(blob, filename);
-
-      // Done
-      setDownloadState((prev) => ({
-        ...prev,
-        [trackId]: {
-          progress: 100,
-          status: 'ready',
-          speedFormatted: 'Voltooid',
-          etaFormatted: '0s',
-          loadedMb: Number((blob.size / (1024 * 1024)).toFixed(1)),
-          totalMb: Number((blob.size / (1024 * 1024)).toFixed(1)),
-        },
-      }));
-
-      saveToHistory({
-        ...track,
-        isDownloaded: true,
-        format: ext,
-        fileSizeMb: blob.size > 0 ? Number((blob.size / 1024 / 1024).toFixed(2)) : 0,
-      });
-
-      // Reset status after 3.5 seconds
-      setTimeout(() => {
-        setDownloadState((prev) => ({
-          ...prev,
-          [trackId]: { progress: 0, status: 'idle' },
-        }));
-      }, 3500);
-    } catch (err) {
-      console.error('Download error:', err);
-      setDownloadState((prev) => ({
-        ...prev,
-        [trackId]: { progress: 0, status: 'error' },
-      }));
-    }
+    enqueueDownload(track, 'library', format);
   };
 
   // Save updated ID3 tags
@@ -805,9 +797,9 @@ export default function App() {
                         onOpenCrossLinks={(t) => setActiveCrossTrack(t)}
                         onOpenAddToPlaylist={(t) => setActiveAddToPlaylistTrack(t)}
                         onOpenAudioAnalysis={(t) => setActiveAnalysisTrack(t)}
-                        downloadProgress={downloadState[track.id]?.progress || 0}
-                        downloadStatus={downloadState[track.id]?.status || 'idle'}
-                        downloadMetrics={downloadState[track.id]}
+                        downloadProgress={combinedDownloadState[track.id]?.progress || 0}
+                        downloadStatus={combinedDownloadState[track.id]?.status || 'idle'}
+                        downloadMetrics={combinedDownloadState[track.id]}
                       />
                     ))}
                   </div>
@@ -816,7 +808,7 @@ export default function App() {
               
               <BatchDownloadSection
                 batchTracks={tracks}
-                downloadState={downloadState}
+                downloadState={combinedDownloadState}
                 language={language}
                 onDownloadTrack={(track) => handleDownloadTrack(track, track.format || 'mp3-320')}
               />

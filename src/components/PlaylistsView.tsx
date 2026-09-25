@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   ListMusic,
   Plus,
@@ -17,10 +17,20 @@ import {
   Share2,
   FileSpreadsheet,
   FileCode,
+  FileArchive,
+  Folder,
+  FolderDown,
+  Loader2,
+  CheckCircle2,
+  Clock,
+  HardDrive,
 } from 'lucide-react';
 import { MusicTrack, Playlist, AppLanguage } from '../types';
 import { CAMELOT_KEY_MAP, normalizeToCamelotKey, generateM3uPlaylist } from '../utils/audioAnalyzer';
 import { exportLibraryAsExcel, exportLibraryAsJson } from '../utils/libraryExporter';
+import { useDownload } from '../context/DownloadContext';
+import { exportPlaylistToZip } from '../utils/zipExporter';
+import { savePlaylistToDb, StoredPlaylist } from '../db/libraryDb';
 
 interface PlaylistsViewProps {
   language: AppLanguage['code'];
@@ -50,19 +60,67 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
   onRemoveTrackFromPlaylist,
 }) => {
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
+  const [isExportingZip, setIsExportingZip] = useState<boolean>(false);
+  const [zipProgressText, setZipProgressText] = useState<string | null>(null);
 
-  // Selected playlist object & its actual tracks
+  // Global download manager context
+  const { enqueueDownload, enqueueBatchDownloads, getTrackStatus } = useDownload();
+
+  // Selected playlist object & its strictly isolated tracks
   const selectedPlaylist = useMemo(
     () => playlists.find((p) => p.id === selectedPlaylistId) || null,
     [playlists, selectedPlaylistId]
   );
 
+  // Strict Playlist Separation: only tracks explicitly belonging to this playlistId
   const playlistTracks = useMemo(() => {
     if (!selectedPlaylist) return [];
     return selectedPlaylist.trackIds
       .map((id) => library.find((t) => t.id === id))
       .filter(Boolean) as MusicTrack[];
   }, [selectedPlaylist, library]);
+
+  // Sync playlist metadata to IndexedDB when created or selected
+  useEffect(() => {
+    if (selectedPlaylist) {
+      const storedPl: StoredPlaylist = {
+        id: selectedPlaylist.id,
+        name: selectedPlaylist.name,
+        coverUrl: selectedPlaylist.coverUrl || playlistTracks[0]?.coverUrl,
+        createdAt: selectedPlaylist.createdAt ? new Date(selectedPlaylist.createdAt).getTime() : Date.now(),
+        description: selectedPlaylist.description,
+        color: selectedPlaylist.color,
+      };
+      savePlaylistToDb(storedPl).catch((err) => console.warn('Sync playlist to IndexedDB note:', err));
+    }
+  }, [selectedPlaylist, playlistTracks]);
+
+  // Batch "Download Alles" Action for Active Playlist
+  const handleDownloadAllPlaylistTracks = () => {
+    if (!selectedPlaylist || playlistTracks.length === 0) return;
+    enqueueBatchDownloads(playlistTracks, selectedPlaylist.id);
+  };
+
+  // Batch "Exporteer als ZIP" Action from IndexedDB audio Blobs
+  const handleExportPlaylistZip = async () => {
+    if (!selectedPlaylist || playlistTracks.length === 0 || isExportingZip) return;
+    setIsExportingZip(true);
+    setZipProgressText(language === 'nl' ? 'Audiobestanden ophalen...' : 'Fetching audio files...');
+
+    try {
+      await exportPlaylistToZip(selectedPlaylist.id, selectedPlaylist.name, (info) => {
+        setZipProgressText(`${info.percent}% • ${info.currentTitle}`);
+      });
+      setZipProgressText(language === 'nl' ? 'ZIP gereed!' : 'ZIP ready!');
+      setTimeout(() => setZipProgressText(null), 3000);
+    } catch (err: any) {
+      console.error('ZIP export error:', err);
+      alert(err?.message || (language === 'nl' ? 'Fout bij het maken van ZIP archief' : 'Error generating ZIP archive'));
+      setZipProgressText(null);
+    } finally {
+      setIsExportingZip(false);
+    }
+  };
 
   // Export Playlist as .M3U file
   const handleExportM3u = (playlist: Playlist, tracks: MusicTrack[]) => {
@@ -100,7 +158,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
     onUpdatePlaylists(updatedPlaylists);
   };
 
-  // DETAIL VIEW FOR A SINGLE PLAYLIST
+  // DETAIL VIEW FOR A STRICTLY ISOLATED SINGLE PLAYLIST
   if (selectedPlaylist) {
     const totalDuration = playlistTracks.reduce((acc, curr) => acc + (curr.duration || 180), 0);
     const avgBpm =
@@ -110,9 +168,11 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
           )
         : 126;
 
+    const downloadedCount = playlistTracks.filter((t) => getTrackStatus(t.id).isCompleted || t.isDownloaded).length;
+
     return (
       <div className="space-y-6 animate-fade-in">
-        {/* Back Button & Header */}
+        {/* Back Button & Navigation Breadcrumb */}
         <div className="flex items-center justify-between">
           <button
             onClick={() => setSelectedPlaylistId(null)}
@@ -121,6 +181,11 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
             <ChevronLeft className="w-4 h-4 text-yellow-400" />
             <span>{language === 'nl' ? 'Terug naar alle Afspeellijsten' : 'Back to Playlists'}</span>
           </button>
+
+          <div className="flex items-center gap-2 text-xs font-mono text-zinc-400">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span>{downloadedCount}/{playlistTracks.length} lokaal opgeslagen</span>
+          </div>
         </div>
 
         {/* Playlist Hero Bento Card */}
@@ -159,7 +224,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
                 {selectedPlaylist.name}
               </h2>
               <p className="text-xs md:text-sm text-zinc-400 font-medium">
-                {selectedPlaylist.description || 'Persoonlijke samengestelde afspeellijst'}
+                {selectedPlaylist.description || (language === 'nl' ? 'Strikte afspeellijst map • Geïsoleerde weergave' : 'Strict playlist directory')}
               </p>
 
               {/* Stats pill */}
@@ -167,17 +232,53 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
                 <span className="px-3 py-1 rounded-xl bg-zinc-950 text-yellow-400 border border-zinc-800 text-xs font-mono font-bold">
                   ⚡ Gem. Tempo: {avgBpm} BPM
                 </span>
+                <span className="px-3 py-1 rounded-xl bg-zinc-950 text-emerald-400 border border-zinc-800 text-xs font-mono font-bold flex items-center gap-1.5">
+                  <HardDrive className="w-3.5 h-3.5" />
+                  IndexedDB Opslag Actief
+                </span>
               </div>
             </div>
 
-            {/* Action Buttons */}
+            {/* Primary & Batch Action Buttons */}
             <div className="flex flex-wrap items-center gap-3 self-stretch md:self-auto justify-end">
+              
+              {/* REQUIREMENT 4: High-visibility BATCH "DOWNLOAD ALL" BUTTON */}
+              <button
+                onClick={handleDownloadAllPlaylistTracks}
+                disabled={playlistTracks.length === 0}
+                className="px-5 py-2.5 rounded-full bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-300 hover:from-amber-300 hover:to-yellow-300 text-black font-black text-xs md:text-sm flex items-center gap-2 shadow-xl shadow-yellow-400/25 active:scale-95 disabled:opacity-50 transition-all border border-yellow-300/50"
+                title="Voeg alle nummers van deze afspeellijst in batch toe aan de parallelle downloadrij"
+              >
+                <Download className="w-4 h-4 text-black stroke-[2.5]" />
+                <span>{language === 'nl' ? 'Download Alles' : 'Download All'}</span>
+              </button>
+
+              {/* REQUIREMENT 5: BATCH ZIP-EXPORT BUTTON */}
+              <button
+                onClick={handleExportPlaylistZip}
+                disabled={playlistTracks.length === 0 || isExportingZip}
+                className="px-5 py-2.5 rounded-full bg-zinc-800 hover:bg-zinc-700 border border-emerald-500/40 text-emerald-400 font-extrabold text-xs md:text-sm flex items-center gap-2 shadow-lg shadow-emerald-950/40 active:scale-95 disabled:opacity-50 transition-all"
+                title="Pak alle gedownloade audiobestanden uit IndexedDB in als een .ZIP archief"
+              >
+                {isExportingZip ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                    <span>{zipProgressText || (language === 'nl' ? 'Inpakken...' : 'Zipping...')}</span>
+                  </>
+                ) : (
+                  <>
+                    <FileArchive className="w-4 h-4 text-emerald-400" />
+                    <span>{language === 'nl' ? 'Exporteer als ZIP' : 'Export as ZIP'}</span>
+                  </>
+                )}
+              </button>
+
               <button
                 onClick={() => onPlayQueue(playlistTracks)}
                 disabled={playlistTracks.length === 0}
-                className="px-5 py-2.5 rounded-full bg-yellow-400 hover:bg-yellow-300 text-black font-extrabold text-xs md:text-sm flex items-center gap-2 shadow-lg shadow-yellow-400/20 active:scale-95 disabled:opacity-50 transition-all"
+                className="px-4 py-2.5 rounded-full bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white font-bold text-xs flex items-center gap-2 active:scale-95 disabled:opacity-50 transition-all"
               >
-                <Play className="w-4 h-4 fill-black" />
+                <Play className="w-4 h-4 fill-white" />
                 <span>{language === 'nl' ? 'Alles Afspelen' : 'Play All'}</span>
               </button>
 
@@ -200,14 +301,14 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
                 title="Harmonisch sorteren (vloeiende Camelot overgang)"
               >
                 <Sparkles className="w-4 h-4 text-yellow-400" />
-                <span>Harmoniseer Volgorde</span>
+                <span>Harmoniseer</span>
               </button>
 
               <button
                 onClick={() => handleExportM3u(selectedPlaylist, playlistTracks)}
                 disabled={playlistTracks.length === 0}
                 className="px-4 py-2.5 rounded-full bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-cyan-400 font-bold text-xs flex items-center gap-2 active:scale-95 disabled:opacity-50 transition-all"
-                title="Exporteer als M3U8 bestand voor Rekordbox, Serato, Traktor, Virtual DJ"
+                title="Exporteer als M3U8 voor DJ software"
               >
                 <Download className="w-4 h-4 text-cyan-400" />
                 <span>M3U (DJ)</span>
@@ -222,7 +323,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
                 }
                 disabled={playlistTracks.length === 0}
                 className="px-4 py-2.5 rounded-full bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-emerald-400 font-bold text-xs flex items-center gap-2 active:scale-95 disabled:opacity-50 transition-all"
-                title="Exporteer deze afspeellijst inclusief bestandspaden naar Excel"
+                title="Exporteer naar Excel"
               >
                 <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
                 <span>Excel</span>
@@ -237,7 +338,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
                 }
                 disabled={playlistTracks.length === 0}
                 className="px-4 py-2.5 rounded-full bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-blue-400 font-bold text-xs flex items-center gap-2 active:scale-95 disabled:opacity-50 transition-all"
-                title="Exporteer deze afspeellijst naar JSON backup"
+                title="Exporteer naar JSON"
               >
                 <FileCode className="w-4 h-4 text-blue-400" />
                 <span>JSON</span>
@@ -246,13 +347,13 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
           </div>
         </div>
 
-        {/* Tracks in this playlist */}
+        {/* Tracks Table in strictly this playlist */}
         {playlistTracks.length === 0 ? (
           <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-12 text-center space-y-3">
             <Music2 className="w-12 h-12 mx-auto text-zinc-600" />
-            <h4 className="text-base font-bold text-white">Deze afspeellijst is nog leeg</h4>
+            <h4 className="text-base font-bold text-white">Deze afspeellijst map is nog leeg</h4>
             <p className="text-xs text-zinc-400 max-w-sm mx-auto">
-              Voeg nummers toe via het 'Toevoegen aan afspeellijst' icoon op elk gewenst nummer in de bibliotheek of downloader.
+              Voeg nummers toe via het 'Toevoegen aan afspeellijst' icoon op elk nummer. Nummers van andere afspeellijsten blijven strikt gescheiden.
             </p>
           </div>
         ) : (
@@ -263,11 +364,12 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
                   <tr>
                     <th className="py-3 px-4 w-12 text-center">#</th>
                     <th className="py-3 px-4">Titel & Artiest</th>
+                    <th className="py-3 px-4 text-center">Status</th>
                     <th className="py-3 px-4 text-center">BPM</th>
                     <th className="py-3 px-4 text-center">Key</th>
                     <th className="py-3 px-4 hidden sm:table-cell">Genre</th>
                     <th className="py-3 px-4 text-right">Duur</th>
-                    <th className="py-3 px-4 text-center w-24">Acties</th>
+                    <th className="py-3 px-4 text-center w-28">Acties</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/80 text-zinc-200">
@@ -275,6 +377,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
                     const isPlaying = playingTrackId === track.id;
                     const trackKey = normalizeToCamelotKey(track.key);
                     const meta = CAMELOT_KEY_MAP[trackKey];
+                    const downloadStatus = getTrackStatus(track.id);
 
                     return (
                       <tr
@@ -306,6 +409,28 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
                           </div>
                         </td>
 
+                        {/* Status Badge: Active / Completed in IndexedDB / Idle */}
+                        <td className="py-3 px-4 text-center">
+                          {downloadStatus.isActive ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-400/10 text-yellow-400 font-mono text-[10px] font-bold border border-yellow-400/30">
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              {downloadStatus.progress}%
+                            </span>
+                          ) : downloadStatus.isQueued ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 font-mono text-[10px]">
+                              <Clock className="w-3 h-3" />
+                              Rij
+                            </span>
+                          ) : downloadStatus.isCompleted || track.isDownloaded ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-mono text-[10px] font-bold border border-emerald-500/30">
+                              <CheckCircle2 className="w-3 h-3" />
+                              IDB
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-zinc-500 font-mono">Klaar</span>
+                          )}
+                        </td>
+
                         <td className="py-3 px-4 text-center font-mono font-bold text-yellow-400">
                           {track.bpm || 126}
                         </td>
@@ -326,6 +451,16 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
 
                         <td className="py-3 px-4 text-center">
                           <div className="flex items-center justify-center gap-1">
+                            {/* Individual Download Action */}
+                            <button
+                              onClick={() => enqueueDownload(track, selectedPlaylist.id)}
+                              disabled={downloadStatus.isActive || downloadStatus.isQueued}
+                              className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-yellow-400 transition-colors disabled:opacity-40"
+                              title="Download track naar lokale opslag"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                            </button>
+
                             <button
                               onClick={() => onPlayTrack(track, playlistTracks)}
                               className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
@@ -337,7 +472,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
                             <button
                               onClick={() => onRemoveTrackFromPlaylist(selectedPlaylist.id, track.id)}
                               className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-red-400 transition-colors"
-                              title="Verwijder uit afspeellijst"
+                              title="Verwijder uit deze afspeellijst map"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -355,19 +490,19 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
     );
   }
 
-  // OVERVIEW OF ALL PLAYLISTS
+  // REQUIREMENT 2: OVERVIEW OF ALL PLAYLISTS IN AN ORGANIZED DIRECTORY / FOLDER UX
   return (
     <div className="space-y-6 animate-fade-in">
       
-      {/* Top Banner & Creation Buttons */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-zinc-900/90 border border-zinc-800 p-6 rounded-3xl shadow-xl">
+      {/* Top Banner & Creation Action Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-zinc-900/90 border border-zinc-800 p-6 rounded-3xl shadow-xl backdrop-blur-md">
         <div className="space-y-1">
           <h2 className="text-xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
-            <ListMusic className="w-6 h-6 text-yellow-400" />
-            <span>Mijn Afspeellijsten ({playlists.length})</span>
+            <Folder className="w-6 h-6 text-yellow-400 fill-yellow-400/20" />
+            <span>Afspeellijsten Mappen ({playlists.length})</span>
           </h2>
           <p className="text-xs text-zinc-400">
-            Creëer handmatige afspeellijsten of laat de slimme DJ generator harmonische sets samenstellen op basis van BPM en Key.
+            Georganiseerde mapstructuur met strikte tracks-scheiding. Klik op een afspeellijst om uitsluitend de bijbehorende nummers te beheren.
           </p>
         </div>
 
@@ -390,29 +525,29 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
         </div>
       </div>
 
-      {/* Playlists Grid */}
+      {/* Directory Folders Grid */}
       {playlists.length === 0 ? (
         <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-12 text-center space-y-4">
           <div className="w-16 h-16 rounded-3xl bg-zinc-800 border border-zinc-700 flex items-center justify-center mx-auto text-yellow-400">
-            <ListMusic className="w-8 h-8" />
+            <Folder className="w-8 h-8 fill-yellow-400/20" />
           </div>
           <div className="space-y-1">
-            <h3 className="text-lg font-bold text-white">Nog geen afspeellijsten</h3>
+            <h3 className="text-lg font-bold text-white">Nog geen afspeellijst mappen</h3>
             <p className="text-xs md:text-sm text-zinc-400 max-w-md mx-auto">
-              Maak een nieuwe afspeellijst aan of gebruik de Slimme DJ Generator om direct een set te genereren van je gedownloade nummers.
+              Maak een nieuwe afspeellijst map aan om je muziek strikt gescheiden te downloaden en te organiseren.
             </p>
           </div>
           <div className="flex items-center justify-center gap-3 pt-2">
             <button
-              onClick={onOpenSmartPlaylist}
+              onClick={onOpenCreatePlaylist}
               className="px-6 py-2.5 rounded-full bg-yellow-400 hover:bg-yellow-300 text-black font-black text-xs transition-all shadow-lg shadow-yellow-400/20"
             >
-              Slimme Generator Starten
+              Eerste Afspeellijst Maken
             </button>
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {playlists.map((pl) => {
             const tracksInPl = pl.trackIds
               .map((id) => library.find((t) => t.id === id))
@@ -429,10 +564,26 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
               <div
                 key={pl.id}
                 onClick={() => setSelectedPlaylistId(pl.id)}
-                className="bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-3xl p-5 flex flex-col justify-between space-y-4 transition-all group cursor-pointer shadow-xl hover:shadow-2xl"
+                className="bg-zinc-900/90 border border-zinc-800 hover:border-yellow-400/50 rounded-3xl p-5 flex flex-col justify-between space-y-4 transition-all group cursor-pointer shadow-xl hover:shadow-2xl hover:scale-[1.01] relative overflow-hidden backdrop-blur-sm"
               >
+                {/* Folder Header Indicator */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-yellow-400/10 border border-yellow-400/30 flex items-center justify-center text-yellow-400 group-hover:bg-yellow-400 group-hover:text-black transition-colors">
+                      <Folder className="w-4 h-4 fill-current" />
+                    </div>
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold">
+                      Map
+                    </span>
+                  </div>
+
+                  <span className="px-2.5 py-0.5 rounded-full bg-zinc-950 text-yellow-400 text-[10px] font-mono font-bold border border-zinc-800">
+                    {tracksInPl.length} tracks
+                  </span>
+                </div>
+
                 {/* 2x2 Mosaic artwork */}
-                <div className="relative aspect-square rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-950 shadow-md grid grid-cols-2 grid-rows-2">
+                <div className="relative aspect-video rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-950 shadow-inner grid grid-cols-2 grid-rows-2">
                   {tracksInPl.slice(0, 4).map((t, i) => (
                     <img
                       key={t.id + i}
@@ -442,20 +593,21 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
                     />
                   ))}
                   {tracksInPl.length === 0 && (
-                    <div className="col-span-2 row-span-2 flex items-center justify-center text-yellow-400">
-                      <ListMusic className="w-12 h-12" />
+                    <div className="col-span-2 row-span-2 flex items-center justify-center text-zinc-600">
+                      <ListMusic className="w-10 h-10" />
                     </div>
                   )}
 
                   {/* Play Button Hover Overlay */}
-                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         onPlayQueue(tracksInPl);
                       }}
                       disabled={tracksInPl.length === 0}
-                      className="w-12 h-12 rounded-full bg-yellow-400 text-black flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-transform"
+                      className="w-11 h-11 rounded-full bg-yellow-400 text-black flex items-center justify-center shadow-xl hover:scale-110 active:scale-95 transition-transform"
+                      title="Alles afspelen"
                     >
                       <Play className="w-5 h-5 fill-black ml-0.5" />
                     </button>
@@ -464,35 +616,39 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
 
                 {/* Playlist Info */}
                 <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-base font-bold text-white truncate group-hover:text-yellow-400 transition-colors">
-                      {pl.name}
-                    </h3>
-                  </div>
+                  <h3 className="text-base font-extrabold text-white truncate group-hover:text-yellow-400 transition-colors">
+                    {pl.name}
+                  </h3>
                   <p className="text-xs text-zinc-400 truncate">
-                    {pl.description || `${tracksInPl.length} nummers`}
+                    {pl.description || `${tracksInPl.length} nummers • ${Math.floor(totalDuration / 60)} min`}
                   </p>
                 </div>
 
-                {/* Stats & Actions Footer */}
-                <div className="pt-3 border-t border-zinc-800 flex items-center justify-between text-xs text-zinc-500">
+                {/* Quick Directory Actions Bar */}
+                <div className="pt-3 border-t border-zinc-800/80 flex items-center justify-between text-xs text-zinc-500">
                   <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 rounded bg-zinc-950 text-[10px] font-mono text-yellow-400 font-bold border border-zinc-800">
-                      {tracksInPl.length} tracks
-                    </span>
-                    <span className="text-[11px] font-mono">{avgBpm} BPM</span>
+                    <span className="text-[11px] font-mono text-zinc-400">{avgBpm} BPM</span>
                   </div>
 
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeletePlaylist(pl.id);
-                    }}
-                    className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-red-400 transition-colors"
-                    title="Afspeellijst Verwijderen"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                    {/* Quick Download All icon */}
+                    <button
+                      onClick={() => enqueueBatchDownloads(tracksInPl, pl.id)}
+                      disabled={tracksInPl.length === 0}
+                      className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-yellow-400 transition-colors disabled:opacity-30"
+                      title="Download alle nummers van deze map"
+                    >
+                      <FolderDown className="w-4 h-4" />
+                    </button>
+
+                    <button
+                      onClick={() => onDeletePlaylist(pl.id)}
+                      className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-red-400 transition-colors"
+                      title="Map verwijderen"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
             );
