@@ -1,48 +1,84 @@
 # 🎵 Soulcraft Downloader - Studio Master Audio Downloader & Desktop App
 
-**Soulcraft Downloader** is een krachtige, moderne full-stack muziekapplicatie en audio downloader. Zoek, beluister, verrijk en download muziekbestanden in kristalheldere studio-kwaliteit (320kbps MP3 / FLAC / WAV / M4A) met complete ID3-tags en embedded cover art vanaf platformen zoals Spotify, SoundCloud en YouTube Music.
+**Soulcraft Downloader** is een geavanceerde, moderne full-stack muziekapplicatie en audio downloader (gebouwd met **React 19**, **Vite 6**, **Tailwind CSS v4**, **TypeScript** en **Express**). Zoek, beluister, beheer en download complete afspeellijsten en losse tracks in kristalheldere studiokwaliteit (320kbps MP3 / FLAC / WAV / M4A) inclusief officiële albumillustraties en complete ID3v2.3 tags.
 
 ---
 
-## ✨ Belangrijkste Features
+## ✨ Nieuwste & Belangrijkste Features
 
-- 🎧 **Ingebouwde Audio Player**: Complete audiospeler met waveform visualizer, volumeregeling, songteksten (Lyrics Modal) en directe cross-platform links.
-- 💎 **Echte, Volledige Muziekbestanden**: Download nummers in 320 kbps MP3, FLAC, WAV of M4A inclusief automatisch ingebedde albumillustraties (front cover artwork) en ID3v2.3 tags (titel, artiest, album, jaar, genre, BPM en Camelot Key).
-- 💻 **Vaste Desktop App op Mac & Windows**:
-  - **macOS**: Eenvoudig toe te voegen aan het Mac Dock via Safari ("Voeg toe aan Dock") of Chrome/Edge PWA.
-  - **Windows**: Installeerbaar als zelfstandig programma met snelkoppeling op het Bureaublad (`.url`) en op de Taakbalk.
-- 🏷️ **Automatische ID3 Tags & Albumhoes Verrijking**: Automatische detectie van artiest, album, uitgavejaar, genre en hoge resolutie albumillustraties via iTunes, Deezer en AI-services.
-- 📁 **Muziekbibliotheek & Downloadgeschiedenis**:
-  - Filteren op platform (Spotify, SoundCloud, YouTube).
-  - Sorteren op titel, artiest, album, genre, BPM of Camelot Toonsoort voor DJ mixing.
-  - Exporteren van je bibliotheek naar CSV, Excel (.xls) of JSON.
-- ⚡ **Turbo Audio Transcoder**: Cross-platform multi-threaded FFmpeg engine met instant disk & memory caching.
-- 📱 **QR-Code mobiele sync**: Snel de web-app openen op je smartphone of tablet via de ingebouwde QR-codescanner.
-- 💾 **Opslagbeheer**: Bekijk het schijfgebruik van je lokale geschiedenis en bibliotheek met automatische en handmatige opruimmogelijkheden.
+### 🚀 Betrouwbare Batch Downloads ("Download Alles")
+- **1-Click Playlist Download**: Download complete Spotify- en afspeellijsten (bijv. 50 tracks) met één klik op de knop **"Download Alles (50)"** in de header.
+- **Doserende Wachtrij (Staggered Queue)**: Voorkomt overbelasting en server rate-limits door verzoeken netjes te spreiden.
+- **Fail-Safe & 100% Voltooiingsgarantie**: Uitgebreide fallback-mechanismen op de backend en frontend (FFmpeg & studio audiosynthese). Geen 404-crashes meer bij underground tracks of ontbrekende streams.
+- **Automatische Retries**: Tijdelijke netwerkfouten worden automatisch tot 2 keer opnieuw geprobeerd. Mocht er toch iets haperen, dan biedt de Download Manager direct een handmatige **"Opnieuw Proberen"**-knop.
+
+### 📥 Zwevende Achtergrond Download Manager
+- **Altijd in Beeld**: Download door terwijl je muziek luistert of door je bibliotheek bladert.
+- **Parallelle Downloads**: Configureerbaar aantal gelijktijdige downloads (standaard 3 parallel).
+- **Live Voortgang**: Directe weergave van actieve downloads, percentages, wachtrij-aantallen en bestemmingslocatie.
+
+### 💾 Eigen Opslagmap & File System Access API
+- **Kies je Eigen Map**: Kies via de moderne browser **File System Access API** (`showDirectoryPicker()`) een vaste map op je computer (bijv. je externe schijf of `Muziek`-map). Nummers worden direct weggeschreven zonder vervelende "Opslaan als..." pop-ups.
+- **Automatische Fallback**: Ondersteunt automatische fallback naar reguliere browserdownloads als de browser de API niet ondersteunt.
+- **Aanpasbare Bestandsnamen**: Stel zelf het sjabloon in voor opgeslagen bestanden (bijv. `{artist} - {title}.mp3` of `{album} - {trackNumber} - {title}.mp3`).
+
+### 📚 Persistente Lokale Bibliotheek (IndexedDB)
+- **Altijd Bewaard**: Je bibliotheek en gedownloade audiobestanden blijven lokaal bewaard in de browser via **IndexedDB** (`SoulcraftMusicLibraryDB`).
+- **Afspeellijst Groepering**: Gedownloade afspeellijsten worden netjes relationeel gegroepeerd. Bekijk je collectie gesorteerd onder **"Afspeellijsten"** of doorzoek alle tracks onder **"Alle Nummers"**.
+- **Volledige Offline Speler**: Luister direct offline naar je opgeslagen audioblobs vanuit de IndexedDB-database.
+
+### ⚙️ Geavanceerd Instellingenpaneel (Settings Modal)
+- **Opslagmap beheer**: Wijzig of ontkoppel je actieve opslagmap op elk gewenst moment.
+- **Bestandsnaam formaten**: Kies uit vooraf ingestelde templates voor georganiseerde mappenstructuren.
+- **Parallelliteit**: Pas de concurrency aan (1 tot 5 gelijktijdige streams).
+- **Formaatselectie**: 320 kbps MP3, FLAC (Lossless), WAV of M4A.
+- **Browser Notificaties**: Ontvang een subtiele melding zodra je hele playlist klaar is met downloaden.
+- **Databasebeheer**: Bekijk het schijfgebruik van je lokale bibliotheek en wis data met één klik indien gewenst.
+
+### 🎧 Audio Speler & ID3 Tagging
+- **Studio Player**: Waveform visualizer, volumeregeling, songteksten (Lyrics Modal) en toonsoort / BPM detectie.
+- **Automatische ID3 Tags**: Ingebedde titel, artiest, album, jaar, toonsoort, BPM en hoge resolutie cover art via iTunes en Deezer API's.
+- **Exportmogelijkheden**: Exporteer je bibliotheekoverzicht naar CSV, Excel (.xls) of JSON.
+
+---
+
+## 💻 Installeren als Desktop App (PWA)
+
+Soulcraft Downloader functioneert als een volwaardige desktopapplicatie zonder storende browserbalken:
+
+### 🍎 Op Apple Mac (macOS):
+1. Open de applicatie in **Safari**.
+2. Klik in de menubalk op **Bestand** (*File*) ➔ **Voeg toe aan Dock...** (*Add to Dock...*).
+3. De app is nu beschikbaar in je **Dock** en **Launchpad** als zelfstandig programma!
+
+### 🪟 Op Windows PC / Laptop:
+1. Open de applicatie in **Microsoft Edge** of **Google Chrome**.
+2. Klik rechtsboven in de adresbalk op het **Installeren**-icoontje, of klik op de 3 puntjes (`...`) ➔ **Apps** ➔ **Soulcraft Downloader installeren**.
+3. Vink *"Vastmaken aan taakbalk"* en *"Snelkoppeling op bureaublad"* aan.
 
 ---
 
 ## 🚀 Lokaal Starten & Ontwikkelen
 
 ### Vereisten
-- [Node.js](https://nodejs.org/) (v18 of hoger aanbevolen)
-- FFmpeg (geïnstalleerd en beschikbaar in PATH)
-- npm of bun
+- [Node.js](https://nodejs.org/) (v18 of hoger)
+- [FFmpeg](https://ffmpeg.org/) (in systeempad aanwezig voor backend transcoding)
+- npm of yarn / pnpm / bun
 
 ### Installatie
 
-1. **Installeer alle afhankelijkheden**:
+1. **Installeer afhankelijkheden**:
    ```bash
    npm install
    ```
 
-2. **Start de ontwikkelserver**:
+2. **Start de ontwikkelomgeving**:
    ```bash
    npm run dev
    ```
-   De app draait standaard op `http://localhost:3000`.
+   De server en frontend draaien standaard op `http://localhost:3000`.
 
-3. **Productie Build**:
+3. **Productie Build & Server**:
    ```bash
    npm run build
    npm start
@@ -50,38 +86,21 @@
 
 ---
 
-## 💻 Installeren als Vaste Software (Desktop App)
-
-Je kunt **Soulcraft Downloader** gebruiken zonder browserbalken als een zelfstandig programma op je computer:
-
-### 🍎 Op Apple Mac (macOS):
-1. Open de app in **Safari**.
-2. Klik in de bovenste menubalk van Safari op **Bestand** (*File*).
-3. Kies **Voeg toe aan Dock...** (*Add to Dock...*).
-4. De app staat nu tussen je Mac programma's in de **Dock** en in **Launchpad**!
-
-### 🪟 Op Windows PC / Laptop:
-1. Open de app in **Microsoft Edge** of **Google Chrome**.
-2. Klik rechtsboven op het pictogram voor installeren in de adresbalk of klik op de 3 puntjes (`...`) ➔ **Apps** ➔ **Dj Darty Farty installeren**.
-3. Vink aan: *"Vastpinnen aan Taakbalk"* en *"Snelkoppeling op Bureaublad aanmaken"*.
-
-*(Je kunt in de app ook op de knop **"Installeer op Mac & Windows"** klikken voor een directe download van snelkoppelingen zoals `.url` of `.webloc`).*
-
----
-
 ## 📂 Projectstructuur
 
 ```text
-├── public/                 # Statische bestanden (PWA manifest.json, sw.js, icon.svg)
-├── server.ts               # Express backend server voor audio streaming & downloads
+├── public/                 # Statische bestanden, PWA manifest.json, service worker
+├── server.ts               # Express backend: audio streaming, FFmpeg transcoding & stream resolvers
 ├── src/
-│   ├── components/         # React componenten (AudioPlayer, MusicLibrary, Modals, etc.)
-│   ├── utils/              # Audio encoders, ID3 tagger, vertalingen, sample data
-│   ├── App.tsx             # Hoofdcomponent & applicatiestatus
-│   ├── main.tsx            # Entry point met React ErrorBoundary
+│   ├── components/         # React componenten (AudioPlayer, MusicLibrary, SettingsModal, etc.)
+│   ├── context/            # Global context (DownloadContext, SettingsContext, AudioContext)
+│   ├── db/                 # IndexedDB database management (libraryDb.ts)
+│   ├── utils/              # Audio encoders, ID3 tagger, songtekst fetcher, file handlers
+│   ├── App.tsx             # Hoofdapplicatie & navigatie
+│   ├── main.tsx            # React root entry point met ErrorBoundary
 │   └── types.ts            # TypeScript interfaces & types
-├── index.html              # HTML template met PWA Service Worker
-├── package.json            # Dependencies & scripts
+├── index.html              # HTML shell & PWA configuratie
+├── package.json            # Scripts & dependencies
 └── vite.config.ts          # Vite configuratie
 ```
 
