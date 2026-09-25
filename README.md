@@ -1,5 +1,8 @@
 # 🎵 Soulcraft Downloader - Studio Master Audio Downloader & Desktop App
 
+🌐 **Live Web App:** [https://soulcraftmusicvip.onrender.com](https://soulcraftmusicvip.onrender.com)  
+🐙 **GitHub Repository:** [https://github.com/Bronkie020020/SoulcraftMusic](https://github.com/Bronkie020020/SoulcraftMusic)
+
 **Soulcraft Downloader** is een geavanceerde, moderne full-stack muziekapplicatie en audio downloader (gebouwd met **React 19**, **Vite 6**, **Tailwind CSS v4**, **TypeScript** en **Express**). Zoek, beluister, beheer en download complete afspeellijsten en losse tracks in kristalheldere studiokwaliteit (320kbps MP3 / FLAC / WAV / M4A) inclusief officiële albumillustraties en complete ID3v2.3 tags.
 
 ---

@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: soulcraft-downloader
+    name: soulcraftmusicvip
     runtime: docker
     plan: free
     region: frankfurt
