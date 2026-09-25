@@ -39,6 +39,7 @@
     "audioDownloader.ts",
     "beatportMatcher.ts",
     "universalDownloader.ts",
+    "id3Tagger.ts",
     "vite.config.ts"
   ]
 }

@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { downloadAudioFile, DownloadResult, DownloadProgress, sanitizeWindowsFileName } from './audioDownloader';
+import { writeTrackId3Tags, fetchArtworkBuffer } from './id3Tagger';
 // @ts-ignore
 import youtubeSrPkg from 'youtube-sr';
 const YouTube = (youtubeSrPkg as any).default || youtubeSrPkg;
@@ -160,6 +161,9 @@ export async function downloadBeatportFullTrack(
 
   onStatusUpdate?.(`Volledige track downloaden: ${sanitized}...`);
 
+  // Parallel artwork download in RAM buffer
+  const artworkPromise = fetchArtworkBuffer(metadata.coverUrl);
+
   const downloadRes = await downloadAudioFile({
     url: targetAudioUrl,
     destinationDir,
@@ -169,6 +173,24 @@ export async function downloadBeatportFullTrack(
     onProgress,
     signal,
   });
+
+  // Write complete ID3v2.3 tags and embed artwork
+  try {
+    const artwork = await artworkPromise;
+    onStatusUpdate?.('ID3v2.3 tags, Camelot key en albumhoes inschrijven...');
+    await writeTrackId3Tags(downloadRes.filePath, {
+      title: metadata.title,
+      artists: metadata.artists,
+      mixName: metadata.mixName,
+      genre: metadata.genre,
+      bpm: metadata.bpm,
+      key: metadata.key,
+      year: metadata.releaseDate ? metadata.releaseDate.substring(0, 4) : undefined,
+      artworkUrl: metadata.coverUrl,
+    }, artwork);
+  } catch (tagErr) {
+    console.warn('[Beatport Matcher] ID3 tagging note:', tagErr);
+  }
 
   return {
     ...downloadRes,
