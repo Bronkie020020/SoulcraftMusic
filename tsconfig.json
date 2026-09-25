@@ -37,6 +37,8 @@
     "src/**/*",
     "server.ts",
     "audioDownloader.ts",
+    "beatportMatcher.ts",
+    "universalDownloader.ts",
     "vite.config.ts"
   ]
 }
