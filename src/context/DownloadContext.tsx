@@ -40,6 +40,7 @@ export interface DownloadContextType {
   enqueueDownload: (track: MusicTrack, playlistId?: string, format?: string) => void;
   enqueueBatchDownloads: (tracks: MusicTrack[], playlistId?: string, format?: string) => void;
   cancelDownload: (trackId: string) => void;
+  retryFailedDownloads: () => void;
   clearCompleted: () => void;
   getTrackStatus: (trackId: string) => {
     isQueued: boolean;
@@ -73,6 +74,9 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
   const queueRef = useRef<QueuedDownload[]>([]);
   queueRef.current = queue;
 
+  // Track cache for automatic and manual retry of failed items
+  const trackCacheRef = useRef<Map<string, { track: MusicTrack; playlistId: string; format: string }>>(new Map());
+
   // Enqueue a single track (uses user's configured format by default)
   const enqueueDownload = useCallback((track: MusicTrack, playlistId: string = 'library', format?: string) => {
     // Avoid double queueing
@@ -92,6 +96,7 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
     });
 
     const targetFormat = format && format !== 'mp3-320' ? format : getEffectiveFormatString();
+    trackCacheRef.current.set(track.id, { track, playlistId, format: targetFormat });
 
     const item: QueuedDownload = {
       track,
@@ -111,6 +116,14 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
 
     const newItems: QueuedDownload[] = [];
     tracks.forEach((track) => {
+      trackCacheRef.current.set(track.id, { track, playlistId, format: targetFormat });
+      setFailedDownloads((prev) => {
+        if (!prev.has(track.id)) return prev;
+        const next = new Set(prev);
+        next.delete(track.id);
+        return next;
+      });
+
       if (!existingActiveIds.has(track.id) && !existingQueueIds.has(track.id)) {
         newItems.push({
           track,
@@ -125,6 +138,27 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
       setQueue((prev) => [...prev, ...newItems]);
     }
   }, [getEffectiveFormatString]);
+
+  // Retry any failed downloads
+  const retryFailedDownloads = useCallback(() => {
+    const toRetry: QueuedDownload[] = [];
+    failedDownloads.forEach((trackId) => {
+      const cached = trackCacheRef.current.get(trackId);
+      if (cached) {
+        toRetry.push({
+          track: cached.track,
+          playlistId: cached.playlistId,
+          format: cached.format,
+          enqueuedAt: Date.now(),
+        });
+      }
+    });
+
+    setFailedDownloads(new Set());
+    if (toRetry.length > 0) {
+      setQueue((prev) => [...prev, ...toRetry]);
+    }
+  }, [failedDownloads]);
 
   // Cancel an active or queued download
   const cancelDownload = useCallback((trackId: string) => {
@@ -165,7 +199,7 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
     };
   }, [activeDownloads, queue, completedDownloads, failedDownloads]);
 
-  // Execute a single download worker
+  // Execute a single download worker with automatic retry
   const processDownloadTask = useCallback(async (item: QueuedDownload) => {
     const { track, playlistId, format } = item;
     const trackId = track.id;
@@ -190,30 +224,46 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
     }));
 
     try {
-      // 1. Stream & Render audio from server with live progress
-      const result = await renderTrackToAudioBlob(
-        track,
-        format,
-        (progressInfo: DownloadProgressInfo) => {
-          setActiveDownloads((prev) => {
-            if (!prev[trackId]) return prev;
-            return {
-              ...prev,
-              [trackId]: {
-                ...prev[trackId],
-                progress: progressInfo.progress,
-                status: progressInfo.progress >= 100 ? 'encoding' : 'converting',
-                speedFormatted: progressInfo.speedFormatted,
-                etaFormatted: progressInfo.etaFormatted,
-                loadedMb: progressInfo.loadedMb,
-                totalMb: progressInfo.totalMb,
-              },
-            };
-          });
-        },
-        2,
-        abortController.signal
-      );
+      // 1. Stream & Render audio from server with live progress and internal retry
+      let result = null;
+      let lastErr = null;
+
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          result = await renderTrackToAudioBlob(
+            track,
+            format,
+            (progressInfo: DownloadProgressInfo) => {
+              setActiveDownloads((prev) => {
+                if (!prev[trackId]) return prev;
+                return {
+                  ...prev,
+                  [trackId]: {
+                    ...prev[trackId],
+                    progress: progressInfo.progress,
+                    status: progressInfo.progress >= 100 ? 'encoding' : 'converting',
+                    speedFormatted: progressInfo.speedFormatted,
+                    etaFormatted: progressInfo.etaFormatted,
+                    loadedMb: progressInfo.loadedMb,
+                    totalMb: progressInfo.totalMb,
+                  },
+                };
+              });
+            },
+            2,
+            abortController.signal
+          );
+          if (result) break;
+        } catch (e: any) {
+          lastErr = e;
+          if (e?.name === 'AbortError' || abortController.signal.aborted) throw e;
+          await new Promise((r) => setTimeout(r, 600));
+        }
+      }
+
+      if (!result) {
+        throw lastErr || new Error(`Download mislukt voor ${track.title}`);
+      }
 
       // 2. Persist binary audio Blob & metadata directly to IndexedDB
       const storedTrack: StoredTrack = {
@@ -273,7 +323,7 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
     }
   }, [onTrackSavedToLibrary, writeBlobToLocalFolder]);
 
-  // Concurrency Engine: dynamically limits to user's settings.concurrency (1 to 5)
+  // Concurrency Engine: dynamically limits to user's settings.concurrency (1 to 5) with gentle stagger
   useEffect(() => {
     const currentActiveCount = Object.keys(activeDownloads).length;
     const maxConcurrency = settings.concurrency || 3;
@@ -286,9 +336,15 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
 
       setQueue(remainingQueue);
 
-      // Launch in parallel without blocking UI
-      nextBatch.forEach((item) => {
-        processDownloadTask(item);
+      // Launch with gentle staggering to prevent burst spikes
+      nextBatch.forEach((item, idx) => {
+        if (idx === 0) {
+          processDownloadTask(item);
+        } else {
+          setTimeout(() => {
+            processDownloadTask(item);
+          }, idx * 250);
+        }
       });
     }
   }, [queue, activeDownloads, settings.concurrency, processDownloadTask]);
@@ -296,6 +352,7 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
   const activeCount = Object.keys(activeDownloads).length;
   const queueCount = queue.length;
   const isDownloading = activeCount > 0 || queueCount > 0;
+  const hasFailed = failedDownloads.size > 0;
 
   return (
     <DownloadContext.Provider
@@ -311,6 +368,7 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
         enqueueDownload,
         enqueueBatchDownloads,
         cancelDownload,
+        retryFailedDownloads,
         clearCompleted,
         getTrackStatus,
       }}
@@ -319,7 +377,7 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
 
       {/* Global Background Floating Download Manager with Framer Motion (Motion v12) */}
       <AnimatePresence>
-        {isDownloading && showGlobalFloater && (
+        {(isDownloading || hasFailed) && showGlobalFloater && (
           <motion.div
             initial={{ opacity: 0, y: 50, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -330,7 +388,9 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
             {/* Top Bar */}
             <div className="flex items-center justify-between gap-3 pb-3 border-b border-zinc-800">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-yellow-400 text-black flex items-center justify-center font-black animate-pulse shadow-md shadow-yellow-400/20">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black shadow-md ${
+                  isDownloading ? 'bg-yellow-400 text-black animate-pulse shadow-yellow-400/20' : 'bg-red-500 text-white shadow-red-500/20'
+                }`}>
                   <DownloadCloud className="w-4 h-4" />
                 </div>
                 <div>
@@ -342,6 +402,7 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
                   </h4>
                   <p className="text-[11px] text-zinc-400 font-medium">
                     {queueCount > 0 ? `${queueCount} in wachtrij • ` : ''}
+                    {completedDownloads.size > 0 ? `${completedDownloads.size} voltooid • ` : ''}
                     {settings.customDirectoryName ? `Map: ${settings.customDirectoryName}` : 'IndexedDB & Downloads'}
                   </p>
                 </div>
@@ -357,44 +418,62 @@ export const DownloadProvider: React.FC<DownloadProviderProps> = ({ children, on
             </div>
 
             {/* Active Parallel Download Items */}
-            <div className="py-2.5 space-y-2.5 max-h-56 overflow-y-auto pr-1">
-              {Object.values(activeDownloads).map((active) => (
-                <div key={active.trackId} className="bg-zinc-900/80 rounded-2xl p-2.5 border border-zinc-800/80 space-y-1.5">
-                  <div className="flex items-center justify-between text-xs gap-2">
-                    <span className="font-bold text-zinc-200 truncate flex-1">
-                      {active.track.title}
-                    </span>
-                    <span className="text-[10px] font-mono text-yellow-400 font-extrabold shrink-0">
-                      {active.progress}%
-                    </span>
-                  </div>
+            {activeCount > 0 && (
+              <div className="py-2.5 space-y-2.5 max-h-56 overflow-y-auto pr-1">
+                {Object.values(activeDownloads).map((active) => (
+                  <div key={active.trackId} className="bg-zinc-900/80 rounded-2xl p-2.5 border border-zinc-800/80 space-y-1.5">
+                    <div className="flex items-center justify-between text-xs gap-2">
+                      <span className="font-bold text-zinc-200 truncate flex-1">
+                        {active.track.title}
+                      </span>
+                      <span className="text-[10px] font-mono text-yellow-400 font-extrabold shrink-0">
+                        {active.progress}%
+                      </span>
+                    </div>
 
-                  {/* Motion-animated Progress Bar */}
-                  <div className="w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden">
-                    <motion.div
-                      className="h-full bg-gradient-to-r from-yellow-500 via-amber-400 to-yellow-300 rounded-full"
-                      initial={{ width: 0 }}
-                      animate={{ width: `${active.progress}%` }}
-                      transition={{ ease: 'easeOut', duration: 0.2 }}
-                    />
-                  </div>
+                    {/* Motion-animated Progress Bar */}
+                    <div className="w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden">
+                      <motion.div
+                        className="h-full bg-gradient-to-r from-yellow-500 via-amber-400 to-yellow-300 rounded-full"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${active.progress}%` }}
+                        transition={{ ease: 'easeOut', duration: 0.2 }}
+                      />
+                    </div>
 
-                  <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400">
-                    <span className="flex items-center gap-1">
-                      <Zap className="w-3 h-3 text-yellow-400" />
-                      {active.speedFormatted}
-                    </span>
-                    <span>ETA: {active.etaFormatted}</span>
+                    <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400">
+                      <span className="flex items-center gap-1">
+                        <Zap className="w-3 h-3 text-yellow-400" />
+                        {active.speedFormatted}
+                      </span>
+                      <span>ETA: {active.etaFormatted}</span>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
 
             {/* Queue Counter Footer */}
             {queueCount > 0 && (
               <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between text-[11px] text-zinc-400 font-medium">
                 <span>Volgende in rij: {queue[0]?.track.title}</span>
                 <span className="text-yellow-400 font-bold">+{queueCount} tracks</span>
+              </div>
+            )}
+
+            {/* Failed Downloads Alert & Retry Action */}
+            {hasFailed && (
+              <div className="pt-2 mt-2 border-t border-zinc-800/80 flex items-center justify-between text-xs">
+                <span className="text-red-400 font-semibold flex items-center gap-1 text-[11px]">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{failedDownloads.size} nummers niet voltooid</span>
+                </span>
+                <button
+                  onClick={retryFailedDownloads}
+                  className="px-2.5 py-1 rounded-lg bg-yellow-400/20 hover:bg-yellow-400 text-yellow-300 hover:text-black font-bold text-[10px] transition-colors"
+                >
+                  Opnieuw Proberen
+                </button>
               </div>
             )}
           </motion.div>
