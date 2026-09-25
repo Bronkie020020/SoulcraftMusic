@@ -8,7 +8,7 @@ export interface DownloadedAudioResult {
     isValid: boolean;
     actualDurationSec: number;
     discrepancyMs: number;
-    status: 'valid' | 'corrupted';
+    status: 'valid' | 'corrupted' | 'too_short_preview';
   };
 }
 
@@ -55,7 +55,7 @@ export async function validateAudioDuration(
   actualDurationSec: number;
   discrepancyMs: number;
   hasBeepArtifact: boolean;
-  status: 'valid' | 'corrupted';
+  status: 'valid' | 'corrupted' | 'too_short_preview';
 }> {
   if (!blob || blob.size < 2000) {
     return { isValid: false, actualDurationSec: 0, discrepancyMs: 0, hasBeepArtifact: false, status: 'corrupted' };
@@ -79,25 +79,28 @@ export async function validateAudioDuration(
       await tempCtx.close();
     }
 
-    // A valid audio stream has a decodable duration > 0.5s, valid channel data, and no pure beep corruption
-    const isValid = actualDurationSec > 0.5 && !isNaN(actualDurationSec) && isFinite(actualDurationSec) && !beepAnalysis.isPureTestBeep;
+    // A valid audio stream has a decodable duration > 0.5s, valid channel data, no pure beep corruption,
+    // and is NOT a 20-30s preview snippet when a full song is expected.
+    const isTooShortPreview = (expectedDurationSec || 180) >= 60 && actualDurationSec < 45;
+    const isValid = !isTooShortPreview && actualDurationSec > 0.5 && !isNaN(actualDurationSec) && isFinite(actualDurationSec) && !beepAnalysis.isPureTestBeep;
 
     return {
       isValid,
       actualDurationSec,
       discrepancyMs: 0,
       hasBeepArtifact: beepAnalysis.hasStartBeep || beepAnalysis.hasEndBeep,
-      status: isValid ? 'valid' : 'corrupted',
+      status: isTooShortPreview ? 'too_short_preview' : isValid ? 'valid' : 'corrupted',
     };
   } catch (err) {
     console.warn('[Validation Layer] Client-side AudioContext check note:', err);
-    const isValidSize = blob.size > 15000;
+    const isTooShortSize = (expectedDurationSec || 180) >= 60 && blob.size < 900000;
+    const isValidSize = blob.size > 15000 && !isTooShortSize;
     return {
       isValid: isValidSize,
       actualDurationSec: expectedDurationSec || 30,
       discrepancyMs: 0,
       hasBeepArtifact: false,
-      status: isValidSize ? 'valid' : 'corrupted',
+      status: isTooShortSize ? 'too_short_preview' : isValidSize ? 'valid' : 'corrupted',
     };
   }
 }
@@ -384,7 +387,13 @@ export async function renderTrackToAudioBlob(
   maxRetries: number = 2,
   abortSignal?: AbortSignal
 ): Promise<DownloadedAudioResult> {
-  const url = track.streamUrl || track.originalUrl || '';
+  const rawUrl = track.streamUrl || track.originalUrl || '';
+  const isPreviewUrl =
+    rawUrl.includes('p.scdn.co') ||
+    rawUrl.includes('preview') ||
+    rawUrl.includes('dzcdn.net') ||
+    rawUrl.includes('audio-ssl.itunes.apple.com');
+  const safeUrl = isPreviewUrl ? '' : rawUrl;
   const title = track.title || 'Unknown Title';
   const artist = track.artist || 'Unknown Artist';
   const expectedDurationSec = track.duration && track.duration > 0 ? track.duration : 180;
@@ -409,7 +418,7 @@ export async function renderTrackToAudioBlob(
     try {
       const bitrateMatch = format.match(/-(128|192|320)/);
       const bitrateParam = bitrateMatch ? `&bitrate=${bitrateMatch[1]}` : '';
-      const downloadUrl = `/api/download?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}&format=${encodeURIComponent(format)}${bitrateParam}&album=${encodeURIComponent(track.album || '')}&year=${encodeURIComponent(track.releaseYear || '')}&genre=${encodeURIComponent(track.genre || '')}&coverUrl=${encodeURIComponent(track.coverUrl || '')}&duration=${encodeURIComponent(String(expectedDurationSec))}&bpm=${encodeURIComponent(String(track.bpm || ''))}&key=${encodeURIComponent(track.key || '')}`;
+      const downloadUrl = `/api/download?url=${encodeURIComponent(safeUrl)}&title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}&format=${encodeURIComponent(format)}${bitrateParam}&album=${encodeURIComponent(track.album || '')}&year=${encodeURIComponent(track.releaseYear || '')}&genre=${encodeURIComponent(track.genre || '')}&coverUrl=${encodeURIComponent(track.coverUrl || '')}&duration=${encodeURIComponent(String(expectedDurationSec))}&bpm=${encodeURIComponent(String(track.bpm || ''))}&key=${encodeURIComponent(track.key || '')}`;
       console.info(`[AudioStream Engine] [Attempt ${attempt + 1}/${maxRetries + 1}] Initiating fetch request to backend: ${downloadUrl}`);
       
       const fetchStartTime = performance.now();
@@ -550,12 +559,16 @@ export async function renderTrackToAudioBlob(
 • Audio Integrity Status: ${validation.status.toUpperCase()} (Decodable: ${validation.isValid}, Beep Artifacts: ${validation.hasBeepArtifact})
 • Truncation Inspection: ${actualDurationSec >= 60 ? 'FULL-LENGTH TRACK CONFIRMED' : 'Short snippet/preview detected (<60s)'}`);
 
-            // If the buffer is pure synthetic beep corruption, retry
-            if (!validation.isValid && attempt < maxRetries) {
-              console.warn(`[AudioStream Engine] Attempt ${attempt + 1}: Audio stream contains test beep / corrupted signal. Retrying download...`);
+            // If the buffer is pure synthetic beep corruption or an incomplete 20-30s preview snippet, retry
+            if ((!validation.isValid || validation.status === 'too_short_preview') && attempt < maxRetries) {
+              console.warn(`[AudioStream Engine] Attempt ${attempt + 1}: Incomplete preview snippet detected (${actualDurationSec.toFixed(1)}s < ${expectedDurationSec}s). Retrying full audio...`);
               attempt++;
-              await new Promise((resolve) => setTimeout(resolve, 400 * attempt));
+              await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
               continue;
+            }
+
+            if (validation.status === 'too_short_preview') {
+              throw new Error(`Volledig nummer kon niet worden gedownload (slechts preview van ${actualDurationSec.toFixed(0)}s ontvangen). Onvolledig bestand werd geweigerd.`);
             }
 
             // If start/end lead-in tone burst or DC click artifact was detected, sanitize with micro-fade curve

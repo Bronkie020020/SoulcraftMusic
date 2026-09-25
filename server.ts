@@ -961,10 +961,63 @@ if (!fs.existsSync(TURBO_AUDIO_CACHE_DIR)) {
 
 const audioBufferMemoryCache = new Map<string, { buffer: Buffer; durationSec: number; title?: string; artist?: string; coverUrl?: string; timestamp: number }>();
 
-async function getSoundCloudKey(): Promise<string> {
-  if (cachedSCKey && Date.now() - cachedSCKeyTime < 1000 * 60 * 20) {
+function isPreviewAudioUrl(urlStr?: string): boolean {
+  if (!urlStr) return false;
+  const lower = urlStr.toLowerCase();
+  return (
+    lower.includes('p.scdn.co') ||
+    lower.includes('preview') ||
+    lower.includes('audio-ssl.itunes.apple.com') ||
+    lower.includes('dzcdn.net') ||
+    lower.includes('sndcdn.com/preview') ||
+    lower.includes('audio-preview')
+  );
+}
+
+async function scrapeFreshSoundCloudKey(): Promise<string | null> {
+  try {
+    const htmlRes = await fetch('https://soundcloud.com', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!htmlRes.ok) return null;
+    const html = await htmlRes.text();
+    const scriptRegex = /<script[^>]+src="([^">]+\.js)"/g;
+    const scriptUrls: string[] = [];
+    let match;
+    while ((match = scriptRegex.exec(html)) !== null) {
+      scriptUrls.push(match[1]);
+    }
+    for (const url of scriptUrls.slice(-8)) {
+      try {
+        const sRes = await fetch(url, { signal: AbortSignal.timeout(4000) });
+        if (sRes.ok) {
+          const text = await sRes.text();
+          const m = text.match(/client_id:"([a-zA-Z0-9]{32})"/i) || text.match(/client_id=([a-zA-Z0-9]{32})/i);
+          if (m && m[1]) return m[1];
+        }
+      } catch (_) {}
+    }
+  } catch (_) {}
+  return null;
+}
+
+async function getSoundCloudKey(forceRefresh = false): Promise<string> {
+  if (!forceRefresh && cachedSCKey && Date.now() - cachedSCKeyTime < 1000 * 60 * 30) {
     return cachedSCKey;
   }
+
+  // 1. Live web scraping of soundcloud.com script bundle
+  const scrapedKey = await scrapeFreshSoundCloudKey();
+  if (scrapedKey) {
+    cachedSCKey = scrapedKey;
+    cachedSCKeyTime = Date.now();
+    return scrapedKey;
+  }
+
+  // 2. soundcloud-scraper keygen
   try {
     const key = await scscraper.Util.keygen();
     if (key) {
@@ -973,11 +1026,18 @@ async function getSoundCloudKey(): Promise<string> {
       return key;
     }
   } catch (e) {}
-  return cachedSCKey || 'UMY1dzQ68n2QbCuypNe8JOivmV2FO2Ep';
+
+  // 3. Fallback to active key pool
+  const fallbackKeys = [
+    'pmagYZKQF6mRtNmtRzPkXSQJ76jYHLN8',
+    '2t9loNMn90JkoioIrIWNaWu1aKCbtDAo',
+    'a3e059563d7fd3372b49b37f00a00bcf',
+  ];
+  return fallbackKeys[0];
 }
 
 /**
- * Downloads the complete, full-length audio track buffer (3-5+ minutes) via SoundCloud v2 progressive/HLS streams or YouTube/CDN audio sources
+ * Downloads the complete, full-length audio track buffer (3-8+ minutes) via SoundCloud v2 progressive/HLS streams
  */
 function generateSearchQueries(query: string, artist?: string, title?: string): string[] {
   const queries: string[] = [];
@@ -995,21 +1055,26 @@ function generateSearchQueries(query: string, artist?: string, title?: string): 
   // Clean title: remove " - Original Mix", "(Original Mix)", "(Official Audio)", etc.
   const cleanT = rawT
     .replace(/\s*-\s*(?:original|extended|club|radio|dub)\s*mix/gi, '')
-    .replace(/[\(\[\{](?:original mix|extended mix|radio edit|dub mix|club mix|official video|official audio|remastered)[\)\]\}]/gi, '')
+    .replace(/[\(\[\{](?:original mix|extended mix|radio edit|dub mix|club mix|official video|official audio|remastered|remaster)[\)\]\}]/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
 
   if (cleanA && cleanT) {
     queries.push(`${cleanA} ${cleanT}`);
-  }
-  if (rawA && rawT && (rawA !== cleanA || rawT !== cleanT)) {
-    queries.push(`${rawA} ${rawT}`);
+    queries.push(`${cleanA} - ${cleanT}`);
   }
   if (cleanT && cleanA) {
     queries.push(`${cleanT} ${cleanA}`);
   }
-  if (cleanT && cleanT.length > 5) {
+  // Title alone for iconic dance tracks
+  if (cleanT && cleanT.length >= 4) {
     queries.push(cleanT);
+  }
+  if (cleanA && cleanT) {
+    queries.push(`${cleanA} ${cleanT} original mix`);
+  }
+  if (rawA && rawT && (rawA !== cleanA || rawT !== cleanT)) {
+    queries.push(`${rawA} ${rawT}`);
   }
   if (query) {
     const cleanQ = query
@@ -1018,9 +1083,6 @@ function generateSearchQueries(query: string, artist?: string, title?: string): 
       .trim();
     if (cleanQ && !queries.includes(cleanQ)) {
       queries.push(cleanQ);
-    }
-    if (query !== cleanQ && !queries.includes(query.trim())) {
-      queries.push(query.trim());
     }
   }
 
@@ -1045,7 +1107,7 @@ async function fetchFullLengthAudioBuffer(
   }
 
   const ffmpegBin = getFfmpegBinary();
-  const scKey = await getSoundCloudKey();
+  let scKey = await getSoundCloudKey();
 
   // A. If rawUrl is a direct SoundCloud URL
   if (rawUrl && rawUrl.includes('soundcloud.com') && !rawUrl.includes('/search') && !rawUrl.includes('/sets/') && !rawUrl.includes('/discover')) {
@@ -1108,10 +1170,14 @@ async function fetchFullLengthAudioBuffer(
   const candidates: any[] = [];
   const seenIds = new Set<string>();
 
-  for (const q of searchQueries.slice(0, 3)) {
+  for (const q of searchQueries.slice(0, 5)) {
     try {
-      const searchUrl = `https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(q)}&client_id=${scKey}&limit=15`;
-      const scSearchRes = await fetch(searchUrl);
+      const searchUrl = `https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(q)}&client_id=${scKey}&limit=20`;
+      let scSearchRes = await fetch(searchUrl);
+      if (scSearchRes.status === 401) {
+        scKey = await getSoundCloudKey(true);
+        scSearchRes = await fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(q)}&client_id=${scKey}&limit=20`);
+      }
       if (scSearchRes.ok) {
         const scSearchData = await scSearchRes.json();
         const items = scSearchData.collection || [];
@@ -1120,7 +1186,9 @@ async function fetchFullLengthAudioBuffer(
           seenIds.add(String(item.id));
 
           const durSec = Math.floor((item.duration || 0) / 1000);
-          if (durSec < 45) continue; // Skip short snippets
+          // STRICT RULE: If expected duration is a normal song (>=60s), NEVER accept snippets under 60s
+          if ((expectedDurationSec || 180) >= 60 && durSec < 60) continue;
+          if (durSec < 45) continue; // Skip snippets
 
           const trans = item.media?.transcodings || [];
           const unencryptedTrans = trans.filter(
@@ -1165,9 +1233,9 @@ async function fetchFullLengthAudioBuffer(
           // Duration proximity scoring
           if (expectedDurationSec && expectedDurationSec > 0) {
             const diff = Math.abs(durSec - expectedDurationSec);
-            if (diff <= 12) score += 90;
-            else if (diff <= 35) score += 50;
-            else if (diff <= 75) score += 20;
+            if (diff <= 15) score += 90;
+            else if (diff <= 40) score += 50;
+            else if (diff <= 80) score += 20;
             else if (diff > 180) score -= 120;
           }
 
@@ -1507,68 +1575,73 @@ app.get('/api/download', async (req, res) => {
         } catch (_) {}
       }
     } else {
-      // Fallback: search streaming CDN
-      let audioSourceUrl: string | null = null;
-      if (typeof url === 'string') {
-        if (url.includes('/api/stream')) {
-          try {
-            const parsed = new URL(url, 'http://localhost:3000');
-            const innerUrl = parsed.searchParams.get('url');
-            if (innerUrl && innerUrl.startsWith('http')) audioSourceUrl = innerUrl;
-          } catch (e) {}
-        } else if (url.startsWith('http')) {
-          audioSourceUrl = url;
+      // Primary search yielded no direct buffer. Run deep multi-angle full-audio search.
+      console.log(`[Download API] Executing secondary deep search for full track "${displayTitle}"...`);
+      const secondaryAudio = await fetchFullLengthAudioBuffer(
+        trackTitle || targetQuery,
+        undefined,
+        expectedDurSec,
+        trackArtist,
+        trackTitle
+      );
+
+      if (secondaryAudio && secondaryAudio.buffer && secondaryAudio.buffer.length > 300000) {
+        await fs.promises.writeFile(tmpInput, secondaryAudio.buffer);
+        console.log(`[Download API] Secondary search found full track for "${displayTitle}" (${(secondaryAudio.buffer.length / (1024 * 1024)).toFixed(2)} MB, ~${secondaryAudio.durationSec}s)`);
+      } else {
+        // Tertiary search: pure artist + trackTitle without any symbols
+        const cleanCombined = `${trackArtist.replace(/[^a-zA-Z0-9 ]/g, ' ')} ${trackTitle.replace(/[^a-zA-Z0-9 ]/g, ' ')}`.replace(/\s+/g, ' ').trim();
+        const tertiaryAudio = await fetchFullLengthAudioBuffer(cleanCombined, undefined, expectedDurSec, trackArtist, trackTitle);
+        if (tertiaryAudio && tertiaryAudio.buffer && tertiaryAudio.buffer.length > 300000) {
+          await fs.promises.writeFile(tmpInput, tertiaryAudio.buffer);
+          console.log(`[Download API] Tertiary clean search found full track for "${displayTitle}" (${(tertiaryAudio.buffer.length / (1024 * 1024)).toFixed(2)} MB)`);
         }
       }
 
-      if (!audioSourceUrl) {
-        const results = await searchMusicMetadataAndStream(targetQuery, 1);
-        if (results.length > 0 && results[0].streamUrl) {
-          const streamParams = new URLSearchParams(results[0].streamUrl.split('?')[1]);
-          audioSourceUrl = streamParams.get('url');
-        }
-      }
-
-      if (!audioSourceUrl && trackArtist) {
-        const artistResults = await searchMusicMetadataAndStream(trackArtist, 2).catch(() => []);
-        if (artistResults.length > 0 && artistResults[0].streamUrl) {
-          const streamParams = new URLSearchParams(artistResults[0].streamUrl.split('?')[1]);
-          audioSourceUrl = streamParams.get('url');
-        }
-      }
-
-      if (!audioSourceUrl && trackTitle) {
-        const titleResults = await searchMusicMetadataAndStream(trackTitle, 2).catch(() => []);
-        if (titleResults.length > 0 && titleResults[0].streamUrl) {
-          const streamParams = new URLSearchParams(titleResults[0].streamUrl.split('?')[1]);
-          audioSourceUrl = streamParams.get('url');
-        }
-      }
-
-      if (audioSourceUrl) {
-        try {
-          const response = await fetch(audioSourceUrl, {
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            },
-          });
-          if (response.ok) {
-            const buffer = Buffer.from(await response.arrayBuffer());
-            if (buffer.length > 5000) {
-              await fs.promises.writeFile(tmpInput, buffer);
-            }
+      // Check external non-preview audio source URL if provided (strictly ignoring Spotify/Deezer/iTunes 30s previews)
+      if (!fs.existsSync(tmpInput) || (await fs.promises.stat(tmpInput)).size < 500000) {
+        let externalStreamUrl: string | null = null;
+        if (typeof url === 'string') {
+          if (url.includes('/api/stream')) {
+            try {
+              const parsed = new URL(url, 'http://localhost:3000');
+              const innerUrl = parsed.searchParams.get('url');
+              if (innerUrl && innerUrl.startsWith('http') && !isPreviewAudioUrl(innerUrl)) {
+                externalStreamUrl = innerUrl;
+              }
+            } catch (e) {}
+          } else if (url.startsWith('http') && !isPreviewAudioUrl(url)) {
+            externalStreamUrl = url;
           }
-        } catch (fetchErr) {
-          console.warn('[Download API] Audio stream fetch note:', fetchErr);
+        }
+
+        if (externalStreamUrl) {
+          try {
+            const response = await fetch(externalStreamUrl, {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              },
+            });
+            if (response.ok) {
+              const buffer = Buffer.from(await response.arrayBuffer());
+              // STRICT CHECK: Must be at least 1.5MB to be a real full track
+              if (buffer.length > 1500000) {
+                await fs.promises.writeFile(tmpInput, buffer);
+              }
+            }
+          } catch (fetchErr) {
+            console.warn('[Download API] Audio stream fetch note:', fetchErr);
+          }
         }
       }
 
-      // If source stream was unreachable or buffer empty, generate high-quality studio master with FFmpeg
-      if (!fs.existsSync(tmpInput) || (await fs.promises.stat(tmpInput)).size < 1000) {
-        const synthDur = expectedDurSec || 180;
-        const ffmpegBin = getFfmpegBinary();
-        const synthCmd = `${ffmpegBin} -y -f lavfi -i "sine=frequency=432:duration=${synthDur}" -af "volume=0.85,lowpass=f=2800,afade=t=in:ss=0:d=1.5,afade=t=out:st=${synthDur - 2}:d=2" -c:a libmp3lame -b:a 320k "${tmpInput}"`;
-        await execAsync(synthCmd).catch(() => null);
+      // If STILL no full-length audio file was located, DO NOT write a 20s preview clip!
+      if (!fs.existsSync(tmpInput) || (await fs.promises.stat(tmpInput)).size < 300000) {
+        console.warn(`[Download API] Geen volledig audiobestand gevonden voor "${displayTitle}". 30s preview werd geweigerd.`);
+        res.status(404).json({
+          error: `Geen volledig audiobestand gevonden voor "${displayTitle}". Alleen 30s preview beschikbaar; preview werd geweigerd om onvolledige bestanden te voorkomen.`,
+        });
+        return;
       }
     }
 
