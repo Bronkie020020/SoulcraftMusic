@@ -369,7 +369,7 @@ export async function sanitizeAudioBufferArtifacts(blob: Blob, ext: string): Pro
     // Re-encode sanitized audio to WAV or original format
     const cleanedWavBytes = audioBufferToWav(audioBuffer);
     const mimeType = ext === 'wav' ? 'audio/wav' : 'audio/mpeg';
-    return new Blob([cleanedWavBytes], { type: mimeType });
+    return new Blob([cleanedWavBytes as unknown as BlobPart], { type: mimeType });
   } catch (e) {
     console.warn('[Audio Sanitizer] Non-fatal buffer sanitization skip:', e);
     return blob;
@@ -530,7 +530,7 @@ export async function renderTrackToAudioBlob(
           }
 
           const mimeType = ext === 'wav' ? 'audio/wav' : ext === 'flac' ? 'audio/flac' : ext === 'm4a' ? 'audio/mp4' : 'audio/mpeg';
-          let blob = new Blob([sanitizedBytes], { type: contentType || mimeType });
+          let blob = new Blob([sanitizedBytes as unknown as BlobPart], { type: contentType || mimeType });
           
           if (blob && blob.size > 2000) {
             // Check if downloaded blob is HTML/JSON error text
@@ -620,7 +620,7 @@ export async function renderTrackToAudioBlob(
       const arrayBuffer = await directRes.arrayBuffer();
       const rawBytes = new Uint8Array(arrayBuffer);
       const sanitizedBytes = cleanAndSanitizeAudioBuffer(rawBytes, 'mp3');
-      let directBlob = new Blob([sanitizedBytes], { type: 'audio/mpeg' });
+      let directBlob = new Blob([sanitizedBytes as unknown as BlobPart], { type: 'audio/mpeg' });
       console.info(`[AudioStream Engine] Direct stream proxy response size: ${directBlob.size} bytes (${(directBlob.size / (1024 * 1024)).toFixed(2)} MB)`);
       if (directBlob.size > 5000) {
         const validation = await validateAudioDuration(directBlob, expectedDurationSec);
@@ -642,35 +642,8 @@ export async function renderTrackToAudioBlob(
     console.warn('[AudioStream Engine] Direct stream proxy fetch error:', directErr);
   }
 
-  console.warn(`[AudioStream Engine] Primary and proxy downloads exhausted. Engaging client-side studio acoustic synthesizer for "${artist} - ${title}" to ensure complete playlist download`);
-  try {
-    const fallbackBlob = await fallbackRender(track, ext);
-    if (onProgress) {
-      onProgress({
-        progress: 100,
-        loadedBytes: fallbackBlob.size,
-        totalBytes: fallbackBlob.size,
-        speedBytesPerSec: 1024 * 512,
-        speedFormatted: '512 KB/s',
-        etaSeconds: 0,
-        etaFormatted: '0s',
-        loadedMb: Number((fallbackBlob.size / (1024 * 1024)).toFixed(1)),
-        totalMb: Number((fallbackBlob.size / (1024 * 1024)).toFixed(1)),
-      });
-    }
-    return {
-      blob: fallbackBlob,
-      ext: 'wav',
-      validation: {
-        isValid: true,
-        actualDurationSec: track.duration || 180,
-        discrepancyMs: 0,
-        status: 'valid',
-      },
-    };
-  } catch (synthErr) {
-    throw new Error(`Kon het audiobestand voor "${artist} - ${title}" niet downloaden van de audioserver.`);
-  }
+  console.error(`[AudioStream Engine] Kon geen volledig origineel audiobestand downloaden voor "${artist} - ${title}". 20s previews of gesimuleerde bestanden worden geweigerd.`);
+  throw new Error(`Kon het originele audiobestand voor "${artist} - ${title}" niet downloaden. Onvolledige 20-30s previews of gesimuleerde audio zijn geblokkeerd om te voorkomen dat je een nepbestand ontvangt.`);
 }
 
 /**
@@ -733,7 +706,7 @@ async function fallbackRender(track: MusicTrack, format: string): Promise<Blob> 
   const renderedBuffer = await offlineContext.startRendering();
   const wavBytes = audioBufferToWav(renderedBuffer);
   const mimeType = format.startsWith('wav') ? 'audio/wav' : 'audio/mpeg';
-  return new Blob([wavBytes], { type: mimeType });
+  return new Blob([wavBytes as unknown as BlobPart], { type: mimeType });
 }
 
 function audioBufferToWav(buffer: AudioBuffer): Uint8Array {

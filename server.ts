@@ -18,6 +18,11 @@ import youtubeSrPkg from 'youtube-sr';
 const YouTube = (youtubeSrPkg as any).default || youtubeSrPkg;
 
 // @ts-ignore
+import youtubeDl from 'youtube-dl-exec';
+// @ts-ignore
+import yts from 'yt-search';
+
+// @ts-ignore
 import scscraper from 'soundcloud-scraper';
 const scClient = new scscraper.Client();
 
@@ -950,6 +955,145 @@ function getFfmpegBinary(): string {
   return 'ffmpeg';
 }
 
+function getYtDlpBinaryPath(): string | null {
+  const win = process.platform === 'win32';
+  const exeName = win ? 'yt-dlp.exe' : 'yt-dlp';
+  const candidates = [
+    path.join(process.cwd(), 'node_modules', 'youtube-dl-exec', 'bin', exeName),
+    path.join(process.cwd(), 'bin', exeName),
+    '/usr/local/bin/yt-dlp',
+    '/usr/bin/yt-dlp',
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return null;
+}
+
+async function downloadYouTubeAudioViaYtDlp(
+  targetUrl: string,
+  expectedDurSec?: number,
+  title?: string,
+  artist?: string
+): Promise<{ buffer: Buffer; durationSec: number; title?: string; artist?: string } | null> {
+  const binPath = getYtDlpBinaryPath();
+  const runner = binPath ? (youtubeDl as any).create(binPath) : youtubeDl;
+  const tmpOut = path.join(os.tmpdir(), `ytdl_${Date.now()}_${Math.random().toString(36).substring(2, 6)}.mp3`);
+
+  try {
+    await runner(targetUrl, {
+      extractAudio: true,
+      audioFormat: 'mp3',
+      audioQuality: '0',
+      output: tmpOut,
+      noCheckCertificates: true,
+      jsRuntimes: 'node',
+    });
+
+    if (fs.existsSync(tmpOut)) {
+      const stat = await fs.promises.stat(tmpOut);
+      // Strictly require at least 500KB to ensure a real full audio file
+      if (stat.size > 500000) {
+        const buf = await fs.promises.readFile(tmpOut);
+        try { fs.unlinkSync(tmpOut); } catch (_) {}
+        return {
+          buffer: buf,
+          durationSec: expectedDurSec || 210,
+          title,
+          artist,
+        };
+      }
+    }
+  } catch (err: any) {
+    console.warn('[YouTube Audio Engine] yt-dlp extraction note:', err?.message || err);
+  } finally {
+    if (fs.existsSync(tmpOut)) {
+      try { fs.unlinkSync(tmpOut); } catch (_) {}
+    }
+  }
+  return null;
+}
+
+async function searchYouTubeForBestTrack(
+  queries: string[],
+  expectedDurationSec?: number,
+  targetArtist?: string,
+  targetTitle?: string
+): Promise<{ url: string; title: string; duration: number } | null> {
+  for (const q of queries.slice(0, 4)) {
+    try {
+      const searchRes = await yts(q);
+      const videos = searchRes?.videos || [];
+      if (videos.length === 0) continue;
+
+      let bestVideo: any = null;
+      let highestScore = -999;
+
+      for (const v of videos.slice(0, 10)) {
+        const vDur = v.seconds || 0;
+        // Strictly avoid short previews/snippets (< 45s) and loops (> 15m unless long expected)
+        if (vDur < 45) continue;
+        if (expectedDurationSec && expectedDurationSec < 600 && vDur > 750) continue;
+
+        let score = 100;
+        const lowerVTitle = (v.title || '').toLowerCase();
+        const lowerArtist = (targetArtist || '').toLowerCase();
+        const lowerTrackTitle = (targetTitle || '').toLowerCase();
+
+        // Spam filter
+        const spam = ['10 hour', '10hour', 'hour loop', 'reaction', 'tutorial', 'teaser', 'snippet', 'preview', 'speed up', 'slowed', 'bass boosted'];
+        if (spam.some((s) => lowerVTitle.includes(s))) score -= 250;
+
+        // Positive boosts for original mixes and official releases
+        if (lowerVTitle.includes('audio') || lowerVTitle.includes('official') || lowerVTitle.includes('original mix') || lowerVTitle.includes('extended mix') || lowerVTitle.includes('lyrics')) {
+          score += 35;
+        }
+
+        // Artist match
+        if (lowerArtist) {
+          const artistTokens = lowerArtist.split(/\s+/).filter((t) => t.length > 2);
+          for (const token of artistTokens) {
+            if (lowerVTitle.includes(token)) score += 30;
+          }
+        }
+        // Title match
+        if (lowerTrackTitle) {
+          const titleTokens = lowerTrackTitle.split(/\s+/).filter((t) => t.length > 2);
+          for (const token of titleTokens) {
+            if (lowerVTitle.includes(token)) score += 35;
+          }
+        }
+
+        // Duration proximity (crucial to pick the exact track and not a mix or short preview)
+        if (expectedDurationSec && expectedDurationSec > 0) {
+          const diff = Math.abs(vDur - expectedDurationSec);
+          if (diff <= 10) score += 90;
+          else if (diff <= 30) score += 50;
+          else if (diff <= 60) score += 20;
+          else if (diff > 120) score -= 100;
+        }
+
+        if (score > highestScore) {
+          highestScore = score;
+          bestVideo = v;
+        }
+      }
+
+      if (bestVideo && bestVideo.url) {
+        console.log(`[YouTube Search Engine] Matched best video for "${q}": "${bestVideo.title}" (${bestVideo.seconds}s, score=${highestScore})`);
+        return {
+          url: bestVideo.url,
+          title: bestVideo.title,
+          duration: bestVideo.seconds,
+        };
+      }
+    } catch (e) {
+      console.warn('[YouTube Search Engine] Search note for query:', q, e);
+    }
+  }
+  return null;
+}
+
 let cachedSCKey: string | null = null;
 let cachedSCKeyTime: number = 0;
 
@@ -1165,6 +1309,20 @@ async function fetchFullLengthAudioBuffer(
     } catch (e) {}
   }
 
+  // A2. If rawUrl is a direct YouTube URL
+  if (rawUrl && (rawUrl.includes('youtube.com') || rawUrl.includes('youtu.be'))) {
+    console.log(`[FullAudio Engine] Downloading direct YouTube URL: "${rawUrl}"`);
+    const ytRes = await downloadYouTubeAudioViaYtDlp(rawUrl, expectedDurationSec, targetTitle || query, targetArtist);
+    if (ytRes && ytRes.buffer && ytRes.buffer.length > 500000) {
+      const result = {
+        ...ytRes,
+        timestamp: Date.now(),
+      };
+      audioBufferMemoryCache.set(cacheKey, result);
+      return result;
+    }
+  }
+
   // B. Multi-Query Search on SoundCloud API v2 for studio tracks
   const searchQueries = generateSearchQueries(query, targetArtist, targetTitle);
   const candidates: any[] = [];
@@ -1317,43 +1475,36 @@ async function fetchFullLengthAudioBuffer(
     }
   }
 
-  // C. Fallback: Search YouTube via play-dl / youtube-sr
+  // C. Fallback: Search YouTube via yts and yt-dlp
   try {
     const isYtUrl = rawUrl && (rawUrl.includes('youtube.com') || rawUrl.includes('youtu.be'));
     let ytTargetUrl = isYtUrl ? rawUrl : null;
+    let ytTitle = query;
+    let ytDur = expectedDurationSec || 200;
 
     if (!ytTargetUrl) {
-      for (const q of searchQueries.slice(0, 2)) {
-        const ytSearch = await YouTube.search(`${q} audio`, { limit: 1, type: 'video' }).catch(() => []);
-        if (ytSearch && ytSearch[0] && ytSearch[0].url) {
-          ytTargetUrl = ytSearch[0].url;
-          break;
-        }
+      const match = await searchYouTubeForBestTrack(searchQueries, expectedDurationSec, targetArtist, targetTitle);
+      if (match) {
+        ytTargetUrl = match.url;
+        ytTitle = match.title;
+        ytDur = match.duration;
       }
     }
 
     if (ytTargetUrl) {
-      const streamInfo = await play.stream(ytTargetUrl).catch(() => null);
-      const streamMediaUrl = (streamInfo as any)?.url;
-      if (streamInfo && streamMediaUrl) {
-        const tmpYt = path.join(os.tmpdir(), `yt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}.mp3`);
-        await execAsync(`${ffmpegBin} -y -threads 0 -rw_timeout 15000000 -i "${streamMediaUrl}" -c:a libmp3lame -b:a 320k -q:a 0 "${tmpYt}"`);
-        if (fs.existsSync(tmpYt)) {
-          const buf = await fs.promises.readFile(tmpYt);
-          try { fs.unlinkSync(tmpYt); } catch (_) {}
-          if (buf.length > 200000) {
-            const result = {
-              buffer: buf,
-              durationSec: expectedDurationSec || 200,
-              title: query,
-              artist: targetArtist || '',
-              timestamp: Date.now(),
-            };
-            audioBufferMemoryCache.set(cacheKey, result);
-            console.log(`[FullAudio Engine] Successfully downloaded YouTube track "${query}" (${(buf.length / (1024 * 1024)).toFixed(2)} MB)`);
-            return result;
-          }
-        }
+      console.log(`[FullAudio Engine] Downloading full audio from YouTube: "${ytTitle}" (${ytTargetUrl})...`);
+      const ytResult = await downloadYouTubeAudioViaYtDlp(ytTargetUrl, ytDur, ytTitle, targetArtist);
+      if (ytResult && ytResult.buffer && ytResult.buffer.length > 500000) {
+        const result = {
+          buffer: ytResult.buffer,
+          durationSec: ytDur,
+          title: ytTitle,
+          artist: targetArtist || '',
+          timestamp: Date.now(),
+        };
+        audioBufferMemoryCache.set(cacheKey, result);
+        console.log(`[FullAudio Engine] Successfully downloaded YouTube track "${query}" (${(ytResult.buffer.length / (1024 * 1024)).toFixed(2)} MB, ~${ytDur}s)`);
+        return result;
       }
     }
   } catch (ytErr) {
